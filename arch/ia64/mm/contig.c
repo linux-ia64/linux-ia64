@@ -198,16 +198,11 @@ void __init arch_zone_limits_init(unsigned long *max_zone_pfns)
 }
 
 /*
- * Set up the page tables.
+ * Initialize the kernel's zero page.
  */
 
 void __init
 paging_init (void)
 {
-	unsigned long max_zone_pfns[MAX_NR_ZONES];
-
-	memset(max_zone_pfns, 0, sizeof(max_zone_pfns));
-	arch_zone_limits_init(max_zone_pfns);
-	free_area_init(max_zone_pfns);
 	zero_page_memmap_ptr = virt_to_page(ia64_imva(empty_zero_page));
 }
