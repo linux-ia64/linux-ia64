@@ -594,16 +594,11 @@ void __init arch_zone_limits_init(unsigned long *max_zone_pfns)
 	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
 }
 
-/**
- * paging_init - setup page tables
- *
- * paging_init() sets up the page tables for each node of the system and frees
- * the bootmem allocator memory for general use.
+/*
+ * Initialize the kernel's zero page.
  */
 void __init paging_init(void)
 {
-	sparse_init();
-
 	zero_page_memmap_ptr = virt_to_page(ia64_imva(empty_zero_page));
 }
 
