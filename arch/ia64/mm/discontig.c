@@ -594,14 +594,6 @@ void __init arch_zone_limits_init(unsigned long *max_zone_pfns)
 	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
 }
 
-/*
- * Initialize the kernel's zero page.
- */
-void __init paging_init(void)
-{
-	zero_page_memmap_ptr = virt_to_page(ia64_imva(empty_zero_page));
-}
-
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 		struct vmem_altmap *altmap)

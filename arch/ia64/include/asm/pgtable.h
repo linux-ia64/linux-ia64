@@ -397,7 +397,6 @@ pte_same (pte_t a, pte_t b)
 #define update_mmu_cache(vma, address, ptep) do { } while (0)
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
-extern void paging_init (void);
 
 /*
  * Encode/decode swap entries and swap PTEs. Swap PTEs are all PTEs that
@@ -444,8 +443,7 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
  * for zero-mapped memory areas etc..
  */
 extern unsigned long empty_zero_page[PAGE_SIZE/sizeof(unsigned long)];
-extern struct page *zero_page_memmap_ptr;
-#define ZERO_PAGE(vaddr) (zero_page_memmap_ptr)
+#define ZERO_PAGE(vaddr)	(virt_to_page(ia64_imva(empty_zero_page)))
 
 /* We provide our own get_unmapped_area to cope with VA holes for userland */
 #define HAVE_ARCH_UNMAPPED_AREA

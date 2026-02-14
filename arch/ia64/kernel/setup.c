@@ -643,7 +643,6 @@ setup_arch (char **cmdline_p)
 #endif
 
 	screen_info_setup();
-	paging_init();
 
 	clear_sched_clock_stable();
 }
