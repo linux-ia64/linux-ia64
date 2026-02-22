@@ -1928,14 +1928,14 @@ access_uarea(struct task_struct *child, unsigned long addr,
 
 static const struct user_regset native_regsets[] = {
 	{
-		.core_note_type = NT_PRSTATUS,
+		USER_REGSET_NOTE_TYPE(PRSTATUS),
 		.n = ELF_NGREG,
 		.size = sizeof(elf_greg_t), .align = sizeof(elf_greg_t),
 		.regset_get = gpregs_get, .set = gpregs_set,
 		.writeback = gpregs_writeback
 	},
 	{
-		.core_note_type = NT_PRFPREG,
+		USER_REGSET_NOTE_TYPE(PRFPREG),
 		.n = ELF_NFPREG,
 		.size = sizeof(elf_fpreg_t), .align = sizeof(elf_fpreg_t),
 		.regset_get = fpregs_get, .set = fpregs_set, .active = fpregs_active
