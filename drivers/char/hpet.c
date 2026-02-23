@@ -843,8 +843,7 @@ int hpet_alloc(struct hpet_data *hdp)
 		return 0;
 	}
 
-	hpetp = kzalloc(struct_size(hpetp, hp_dev, hdp->hd_nirqs),
-			GFP_KERNEL);
+	hpetp = kzalloc_flex(*hpetp, hp_dev, hdp->hd_nirqs);
 
 	if (!hpetp)
 		return -ENOMEM;
