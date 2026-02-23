@@ -41,7 +41,7 @@
 #include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/threads.h>
-#include <linux/screen_info.h>
+#include <linux/sysfb.h>
 #include <linux/dmi.h>
 #include <linux/root_dev.h>
 #include <linux/serial.h>
@@ -88,7 +88,7 @@ EXPORT_SYMBOL(local_per_cpu_offset);
 #endif
 unsigned long ia64_cycles_per_usec;
 struct ia64_boot_param *ia64_boot_param;
-struct screen_info screen_info;
+struct sysfb_display_info sysfb_primary_display;
 unsigned long vga_console_iobase;
 unsigned long vga_console_membase;
 
@@ -501,11 +501,11 @@ early_console_setup (char *cmdline)
 }
 
 static void __init
-screen_info_setup(void)
+primary_display_setup(void)
 {
 	unsigned int orig_x, orig_y, num_cols, num_rows, font_height;
 
-	memset(&screen_info, 0, sizeof(screen_info));
+	memset(&sysfb_primary_display, 0, sizeof(sysfb_primary_display));
 
 	if (!ia64_boot_param->console_info.num_rows ||
 	    !ia64_boot_param->console_info.num_cols) {
@@ -523,14 +523,14 @@ screen_info_setup(void)
 		font_height = 400 / num_rows;
 	}
 
-	screen_info.orig_x = orig_x;
-	screen_info.orig_y = orig_y;
-	screen_info.orig_video_cols  = num_cols;
-	screen_info.orig_video_lines = num_rows;
-	screen_info.orig_video_points = font_height;
-	screen_info.orig_video_mode = 3;	/* XXX fake */
-	screen_info.orig_video_isVGA = 1;	/* XXX fake */
-	screen_info.orig_video_ega_bx = 3;	/* XXX fake */
+	sysfb_primary_display.screen.orig_x = orig_x;
+	sysfb_primary_display.screen.orig_y = orig_y;
+	sysfb_primary_display.screen.orig_video_cols  = num_cols;
+	sysfb_primary_display.screen.orig_video_lines = num_rows;
+	sysfb_primary_display.screen.orig_video_points = font_height;
+	sysfb_primary_display.screen.orig_video_mode = 3;	/* XXX fake */
+	sysfb_primary_display.screen.orig_video_isVGA = 1;	/* XXX fake */
+	sysfb_primary_display.screen.orig_video_ega_bx = 3;	/* XXX fake */
 }
 
 static inline void
@@ -642,7 +642,7 @@ setup_arch (char **cmdline_p)
 		init_smp_config();
 #endif
 
-	screen_info_setup();
+	primary_display_setup();
 
 	clear_sched_clock_stable();
 }
