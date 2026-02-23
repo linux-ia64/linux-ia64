@@ -166,7 +166,7 @@ RestRR:											\
 	mov _tmp2=((ia64_rid(IA64_REGION_ID_KERNEL, (num<<61)) << 8) | (pgsize << 2) | vhpt);; \
 	mov rr[_tmp1]=_tmp2
 
-	__PAGE_ALIGNED_DATA
+	__PAGE_ALIGNED_BSS
 
 	.global empty_zero_page
 EXPORT_SYMBOL_GPL(empty_zero_page)
