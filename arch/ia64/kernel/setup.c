@@ -609,19 +609,15 @@ setup_arch (char **cmdline_p)
 	cpu_init();	/* initialize the bootstrap CPU */
 	mmu_context_init();	/* initialize context_id bitmap */
 
-#ifdef CONFIG_VT
-	if (!conswitchp) {
-# if defined(CONFIG_VGA_CONSOLE)
-		/*
-		 * Non-legacy systems may route legacy VGA MMIO range to system
-		 * memory.  vga_con probes the MMIO hole, so memory looks like
-		 * a VGA device to it.  The EFI memory map can tell us if it's
-		 * memory so we can avoid this problem.
-		 */
-		if (efi_mem_type(0xA0000) != EFI_CONVENTIONAL_MEMORY)
-			conswitchp = &vga_con;
-# endif
-	}
+#if defined(CONFIG_VT) && defined(CONFIG_VGA_CONSOLE)
+	/*
+	 * Non-legacy systems may route legacy VGA MMIO range to system
+	 * memory.  vga_con probes the MMIO hole, so memory looks like
+	 * a VGA device to it.  The EFI memory map can tell us if it's
+	 * memory so we can avoid this problem.
+	 */
+	if (efi_mem_type(0xA0000) != EFI_CONVENTIONAL_MEMORY)
+		vgacon_register_screen(&sysfb_primary_display.screen);
 #endif
 
 	/* enable IA-64 Machine Check Abort Handling unless disabled */
