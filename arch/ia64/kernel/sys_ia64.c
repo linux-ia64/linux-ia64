@@ -42,7 +42,7 @@ arch_get_unmapped_area (struct file *filp, unsigned long addr, unsigned long len
 	long map_shared = (flags & MAP_SHARED);
 	unsigned long align_mask = 0;
 	struct mm_struct *mm = current->mm;
-	struct vm_unmapped_area_info info;
+	struct vm_unmapped_area_info info = {};
 
 	if (len > RGN_MAP_LIMIT)
 		return -ENOMEM;
@@ -70,7 +70,6 @@ arch_get_unmapped_area (struct file *filp, unsigned long addr, unsigned long len
 		 */
 		align_mask = PAGE_MASK & (SHMLBA - 1);
 
-	info.flags = 0;
 	info.length = len;
 	info.low_limit = addr;
 	info.high_limit = TASK_SIZE;
