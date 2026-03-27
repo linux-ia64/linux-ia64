@@ -15,6 +15,7 @@
 #define _TOOLS_LINUX_ASM_IA64_BARRIER_H
 
 #include <linux/compiler.h>
+#include <uapi/asm/gcc_intrin.h>
 
 /*
  * Macros to force memory ordering.  In these descriptions, "previous"
