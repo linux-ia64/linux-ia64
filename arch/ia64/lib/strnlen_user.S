@@ -11,38 +11,55 @@
  *	r8:	0 in case of fault, strlen(buffer)+1 otherwise
  *
  * Copyright (C) 1999, 2001 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 2026 EPIC Linux project, Tomas Glozar <tglozar@proton.me>
  */
 
 #include <linux/export.h>
 #include <asm/asmmacro.h>
 
+#define ptr	in0
+#define n	in1
+#define valx	r15
+#define valy	r16
+#define cnt1	r17
+#define cnt2	r18
+#define cend	r19
+#define hint	r20
+
 GLOBAL_ENTRY(__strnlen_user)
 	.prologue
 	alloc r2=ar.pfs,2,0,0,0
-	.save ar.lc, r16
-	mov r16=ar.lc			// preserve ar.lc
-
 	.body
-
-	add r3=-1,in1
+	cmp.eq p6,p0=r0,r0
+	adds cend=1,n
+	EXCLR(.Lexit, ld1 valx=[ptr],1)
+	mov cnt1=0
+	mov cnt2=1
 	;;
-	mov ar.lc=r3
-	mov r9=0
-	;;
-	// XXX braindead strlen loop---this needs to be optimized
+.balign 32
 .Loop1:
-	EXCLR(.Lexit, ld1 r8=[in0],1)
-	add r9=1,r9
+	EXCLR(.Lexit, ld1.s valy=[ptr],1)
+	adds cnt1=2,cnt1
+	cmp.ne.and p6,p0=valx,r0
+	cmp.ne.and p6,p0=cnt2,cend
+(p6)	br.sptk .Loop2
 	;;
-	cmp.eq p6,p0=r8,r0
-(p6)	br.cond.dpnt .Lexit
-	br.cloop.dptk.few .Loop1
-
-	add r9=1,in1			// NUL not found---return N+1
+	chk.s valx,.Lexit
+	adds ret0=-1,cnt1
+	br.ret.sptk.many rp
+.balign 32
+.Loop2:
+	EXCLR(.Lexit, ld1.s valx=[ptr],1)
+	adds cnt2=2,cnt2
+	cmp.ne.and p6,p0=valy,r0
+	cmp.ne.and p6,p0=cnt1,cend
+(p6)	br.sptk .Loop1
 	;;
+	chk.s valy,.Lexit
+	adds ret0=-1,cnt2
+	br.ret.sptk.many rp
 .Lexit:
-	mov r8=r9
-	mov ar.lc=r16			// restore ar.lc
+	mov ret0=0
 	br.ret.sptk.many rp
 END(__strnlen_user)
 EXPORT_SYMBOL(__strnlen_user)
