@@ -800,7 +800,9 @@ void identify_siblings(struct cpuinfo_ia64 *c)
 			printk(KERN_ERR
 				"ia64_sal_pltid failed with %ld\n",
 				status);
-		return;
+
+		/* No SAL_PHYSICAL_ID_INFO, rely on ppid only */
+		pltid = 0;
 	}
 
 	c->socket_id =  (pltid << 8) | info.overview_ppid;
