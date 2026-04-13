@@ -44,7 +44,7 @@ GLOBAL_ENTRY(__strnlen_user)
 	cmp.ne.and p6,p0=cnt2,cend
 (p6)	br.sptk .Loop2
 	;;
-	chk.s valx,.Lexit
+	chk.s valx,.Lfaultx
 	adds ret0=-1,cnt1
 	br.ret.sptk.many rp
 .balign 32
@@ -55,9 +55,23 @@ GLOBAL_ENTRY(__strnlen_user)
 	cmp.ne.and p6,p0=cnt1,cend
 (p6)	br.sptk .Loop1
 	;;
-	chk.s valy,.Lexit
+	chk.s valy,.Lfaulty
 	adds ret0=-1,cnt2
 	br.ret.sptk.many rp
+.Lfaultx:
+	adds cnt1=-2,cnt1
+	adds ptr=-2,ptr
+	cmp.eq p6,p0=r0,r0
+	;;
+	EXCLR(.Lexit, ld1 valx=[ptr],1)
+	br.sptk .Loop1
+.Lfaulty:
+	adds cnt2=-2,cnt2
+	adds ptr=-2,ptr
+	cmp.eq p6,p0=r0,r0
+	;;
+	EXCLR(.Lexit, ld1 valy=[ptr],1)
+	br.sptk .Loop2
 .Lexit:
 	mov ret0=0
 	br.ret.sptk.many rp
