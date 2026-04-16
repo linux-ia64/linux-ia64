@@ -168,11 +168,6 @@ RestRR:											\
 
 	__PAGE_ALIGNED_BSS
 
-	.global empty_zero_page
-EXPORT_SYMBOL_GPL(empty_zero_page)
-empty_zero_page:
-	.skip PAGE_SIZE
-
 	.global swapper_pg_dir
 swapper_pg_dir:
 	.skip PAGE_SIZE

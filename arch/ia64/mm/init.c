@@ -204,6 +204,11 @@ free_initrd_mem (unsigned long start, unsigned long end)
 	}
 }
 
+void __init arch_setup_zero_pages(void)
+{
+    __zero_page = virt_to_page(ia64_imva(empty_zero_page));
+}
+
 /*
  * This installs a clean page in the kernel's page table.
  */
