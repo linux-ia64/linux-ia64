@@ -119,7 +119,7 @@ ia64_init_addr_space (void)
 		vma_set_anonymous(vma);
 		vma->vm_start = current->thread.rbs_bot & PAGE_MASK;
 		vma->vm_end = vma->vm_start + PAGE_SIZE;
-		vm_flags_init(vma, VM_DATA_DEFAULT_FLAGS|VM_GROWSUP|VM_ACCOUNT);
+		vm_flags_init(vma, vma_flags_to_legacy(VMA_DATA_DEFAULT_FLAGS)|VM_GROWSUP|VM_ACCOUNT);
 		vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 		mmap_write_lock(current->mm);
 		if (insert_vm_struct(current->mm, vma)) {
