@@ -1276,6 +1276,18 @@ static int nl80211_prepare_wdev_dump(struct netlink_callback *cb,
 			rtnl_unlock();
 			return -ENODEV;
 		}
+
+		/*
+		 * The first invocation validated the wdev's netns against
+		 * the caller via __cfg80211_wdev_from_attrs(). The wiphy
+		 * may have moved netns between dumpit invocations (via
+		 * NL80211_CMD_SET_WIPHY_NETNS), so re-check here.
+		 */
+		if (!net_eq(wiphy_net(wiphy), sock_net(cb->skb->sk))) {
+			rtnl_unlock();
+			return -ENODEV;
+		}
+
 		*rdev = wiphy_to_rdev(wiphy);
 		*wdev = NULL;
 
@@ -6354,6 +6366,9 @@ nl80211_parse_rnr_elems(struct wiphy *wiphy, struct nlattr *attrs,
 		if (ret)
 			return ERR_PTR(ret);
 
+		if (num_elems >= 255)
+			return ERR_PTR(-EINVAL);
+
 		num_elems++;
 	}
 
@@ -6698,6 +6713,12 @@ static int nl80211_calculate_ap_params(struct cfg80211_ap_settings *params)
 						cap->datalen - 1))
 			return -EINVAL;
 	}
+
+	if (!!params->he_cap != !!params->he_oper)
+		return -EINVAL;
+
+	if (!!params->eht_cap != !!params->eht_oper)
+		return -EINVAL;
 
 	return 0;
 }
@@ -13867,6 +13888,19 @@ static int nl80211_wiphy_netns(struct sk_buff *skb, struct genl_info *info)
 	if (IS_ERR(net))
 		return PTR_ERR(net);
 
+	/*
+	 * The caller already has CAP_NET_ADMIN over the source netns
+	 * (enforced by GENL_UNS_ADMIN_PERM on the genl op). Mirror the
+	 * convention used by net/core/rtnetlink.c::rtnl_get_net_ns_capable()
+	 * and require CAP_NET_ADMIN over the target netns as well, so that
+	 * a caller that is privileged in their own user namespace cannot
+	 * push a wiphy into a netns where they have no privilege.
+	 */
+	if (!ns_capable(net->user_ns, CAP_NET_ADMIN)) {
+		put_net(net);
+		return -EPERM;
+	}
+
 	err = 0;
 
 	/* check if anything to do */
@@ -19828,6 +19862,7 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 		.cmd = NL80211_CMD_SET_PMK,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nl80211_set_pmk,
+		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = IFLAGS(NL80211_FLAG_NEED_NETDEV_UP |
 					 NL80211_FLAG_CLEAR_SKB),
 	},
@@ -19835,6 +19870,7 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 		.cmd = NL80211_CMD_DEL_PMK,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nl80211_del_pmk,
+		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = IFLAGS(NL80211_FLAG_NEED_NETDEV_UP),
 	},
 	{
