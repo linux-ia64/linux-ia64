@@ -24,13 +24,7 @@
 #define RGN_GATE	5	/* Gate page, Kernel text, etc */
 #define RGN_HPAGE	4	/* For Huge TLB pages */
 
-/*
- * PAGE_SHIFT determines the actual kernel page size.
- */
-#define PAGE_SHIFT	CONFIG_PAGE_SHIFT
-
-#define PAGE_SIZE		(__IA64_UL_CONST(1) << PAGE_SHIFT)
-#define PAGE_MASK		(~(PAGE_SIZE - 1))
+#include <vdso/page.h>
 
 #define PERCPU_PAGE_SHIFT	18	/* log2() of max. size of per-CPU area */
 #define PERCPU_PAGE_SIZE	(__IA64_UL_CONST(1) << PERCPU_PAGE_SHIFT)
