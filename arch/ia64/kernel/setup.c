@@ -1001,7 +1001,7 @@ cpu_init (void)
 	 * first user address-space.  This may happen, e.g., due to
 	 * aggressive use of lfetch.fault.
 	 */
-	ia64_set_kr(IA64_KR_PT_BASE, __pa(ia64_imva(empty_zero_page)));
+	ia64_set_kr(IA64_KR_PT_BASE, __pa(ia64_imva_const(empty_zero_page)));
 
 	/*
 	 * Initialize default control register to defer speculative faults except
