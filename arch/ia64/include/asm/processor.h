@@ -632,6 +632,14 @@ ia64_imva (void *addr)
 	return __va(result);
 }
 
+static inline const void *
+ia64_imva_const (const void *addr)
+{
+	const void *result;
+	result = (const void *) ia64_tpa(addr);
+	return __va(result);
+}
+
 #define ARCH_HAS_PREFETCH
 #define ARCH_HAS_PREFETCHW
 #define PREFETCH_STRIDE			L1_CACHE_BYTES
