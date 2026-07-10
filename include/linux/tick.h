@@ -7,6 +7,7 @@
 
 #include <linux/clockchips.h>
 #include <linux/irqflags.h>
+#include <linux/ktime.h>
 #include <linux/percpu.h>
 #include <linux/context_tracking_state.h>
 #include <linux/cpumask.h>
