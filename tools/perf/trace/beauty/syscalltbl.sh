@@ -109,6 +109,12 @@ build_tables "$tools_dir/perf/arch/mips/entry/syscalls/syscall_n64.tbl" "$outfil
 cat >> "$outfile" <<EOF
 #endif // defined(ALL_SYSCALLTBL) || defined(__mips__)
 
+#if defined(ALL_SYSCALLTBL) || defined(__ia64__)
+EOF
+build_tables "$tools_dir/perf/arch/ia64/entry/syscalls/syscall.tbl" "$outfile" common,64 EM_IA_64
+cat >> "$outfile" <<EOF
+#endif // defined(ALL_SYSCALLTBL) || defined(__ia64__)
+
 #if defined(ALL_SYSCALLTBL) || defined(__hppa__)
 #if __BITS_PER_LONG != 64
 EOF
@@ -217,6 +223,12 @@ EOF
 build_outer_table EM_MIPS "$outfile"
 cat >> "$outfile" <<EOF
 #endif // defined(ALL_SYSCALLTBL) || defined(__mips__)
+
+#if defined(ALL_SYSCALLTBL) || defined(__ia64__)
+EOF
+build_outer_table EM_IA_64 "$outfile"
+cat >> "$outfile" <<EOF
+#endif // defined(ALL_SYSCALLTBL) || defined(__ia64__)
 
 #if defined(ALL_SYSCALLTBL) || defined(__hppa__)
 EOF
