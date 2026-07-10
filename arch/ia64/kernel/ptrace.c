@@ -32,6 +32,9 @@
 #include <asm/unwind.h>
 #include <asm/syscall.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/syscalls.h>
+
 #include "entry.h"
 
 /*
@@ -1178,6 +1181,8 @@ syscall_trace_enter (long arg0, long arg1, long arg2, long arg3,
 	if (test_thread_flag(TIF_RESTORE_RSE))
 		ia64_sync_krbs();
 
+	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
+		trace_sys_enter(&regs, syscall_get_nr(current, &regs));
 
 	audit_syscall_entry(regs.r15, arg0, arg1, arg2, arg3);
 
@@ -1194,6 +1199,9 @@ syscall_trace_leave (long arg0, long arg1, long arg2, long arg3,
 	int step;
 
 	audit_syscall_exit(&regs);
+
+	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
+		trace_sys_exit(&regs, syscall_get_return_value(current, &regs));
 
 	step = test_thread_flag(TIF_SINGLESTEP);
 	if (step || test_thread_flag(TIF_SYSCALL_TRACE))

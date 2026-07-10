@@ -539,10 +539,11 @@ GLOBAL_ENTRY(fsys_bubble_down)
 #endif
 	mov ar.rsc=0x3				// M2   set eager mode, pl 0, LE, loadrs=0
 	mov rp=r14				// I0   set the real return addr
+	tbit.z p8,p0=r3,TIF_SYSCALL_TRACEPOINT	// A    bit 7 doesn't fit the "and" imm
 	and r3=_TIF_SYSCALL_TRACEAUDIT,r3	// A
 	;;
 	SSM_PSR_I(p0, p6, r22)			// M2   we're on kernel stacks now, reenable irqs
-	cmp.eq p8,p0=r3,r0			// A
+	cmp.eq.and p8,p0=r3,r0			// A
 (p10)	br.cond.spnt.many ia64_ret_from_syscall	// B    return if bad call-frame or r15 is a NaT
 
 	nop.m 0

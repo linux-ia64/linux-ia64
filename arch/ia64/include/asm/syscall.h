@@ -13,14 +13,28 @@
 #include <uapi/linux/audit.h>
 #include <linux/sched.h>
 #include <linux/err.h>
+#include <asm/unistd.h>
 
+/*
+ * The syscall table holds the (gp-less) entry point address of each handler.
+ * Declared here so the generic ftrace-syscall code's arch_syscall_addr() can
+ * resolve syscall numbers to symbols.
+ */
+extern const unsigned long sys_call_table[NR_syscalls];
+
+/*
+ * ia64 encodes the system call number in r15 with the __NR_Linux (1024) base
+ * applied, but sys_call_table and all generic consumers (syscall tracepoints,
+ * ftrace syscall metadata) work with the 0-based table index. Translate on the
+ * boundary so syscall_get_nr()/syscall_set_nr() speak the generic 0-based ABI.
+ */
 static inline long syscall_get_nr(struct task_struct *task,
 				  struct pt_regs *regs)
 {
 	if ((long)regs->cr_ifs < 0) /* Not a syscall */
 		return -1;
 
-	return regs->r15;
+	return regs->r15 - __NR_Linux;
 }
 
 static inline void syscall_set_nr(struct task_struct *task,
@@ -30,7 +44,7 @@ static inline void syscall_set_nr(struct task_struct *task,
 	if ((long)regs->cr_ifs < 0) /* Not a syscall */
 		return;
 
-	regs->r15 = nr;
+	regs->r15 = nr + __NR_Linux;
 }
 
 

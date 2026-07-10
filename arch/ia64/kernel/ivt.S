@@ -810,13 +810,14 @@ ENTRY(break_fault)
 #endif
 	cmp.eq pKStk,pUStk=r0,r17		// A    were we on kernel stacks already?
 
+	tbit.z p14,p0=r9,TIF_SYSCALL_TRACEPOINT	// A    bit 7 doesn't fit the "and" imm
 	and r9=_TIF_SYSCALL_TRACEAUDIT,r9	// A    mask trace or audit
 	mov r18=ar.bsp				// M2 (12 cyc)
 (pKStk)	br.cond.spnt .break_fixup		// B	we're already in kernel-mode -- fix up RBS
 	;;
 .back_from_break_fixup:
 (pUStk)	addl r1=IA64_STK_OFFSET-IA64_PT_REGS_SIZE,r1 // A    compute base of memory stack
-	cmp.eq p14,p0=r9,r0			// A    are syscalls being traced/audited?
+	cmp.eq.and p14,p0=r9,r0			// A    are syscalls being traced/audited/tracepointed?
 	br.call.sptk.many b7=ia64_syscall_setup	// B
 1:
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE

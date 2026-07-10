@@ -595,9 +595,10 @@ GLOBAL_ENTRY(ia64_ret_from_clone)
 	ld4 r2=[r2]
 	;;
 	mov r8=0
+	tbit.nz p6,p0=r2,TIF_SYSCALL_TRACEPOINT	// bit 7 doesn't fit the "and" imm
 	and r2=_TIF_SYSCALL_TRACEAUDIT,r2
 	;;
-	cmp.ne p6,p0=r2,r0
+	cmp.ne.or p6,p0=r2,r0
 (p6)	br.cond.spnt .strace_check_retval
 	;;					// added stop bits to prevent r8 dependency
 END(ia64_ret_from_clone)
