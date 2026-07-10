@@ -525,7 +525,7 @@ ia64_eoi (void)
 	ia64_srlz_d();
 }
 
-#define cpu_relax()	ia64_hint(ia64_hint_pause)
+#include <asm/vdso/processor.h>
 
 static inline int
 ia64_get_irr(unsigned int vector)

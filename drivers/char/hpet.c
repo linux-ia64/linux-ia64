@@ -38,6 +38,9 @@
 #include <asm/current.h>
 #include <asm/irq.h>
 #include <asm/div64.h>
+#ifdef CONFIG_IA64
+#include <asm/clocksource.h>
+#endif
 
 /*
  * The High Precision Event Timer driver.
@@ -80,6 +83,7 @@ static struct clocksource clocksource_hpet = {
 	.read		= read_hpet,
 	.mask		= CLOCKSOURCE_MASK(64),
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+	.vdso_clock_mode = VDSO_CLOCKMODE_MMIO,
 };
 static struct clocksource *hpet_clocksource;
 #endif
@@ -936,7 +940,7 @@ int hpet_alloc(struct hpet_data *hdp)
 #ifdef CONFIG_IA64
 	if (!hpet_clocksource) {
 		hpet_mctr = (void __iomem *)&hpetp->hp_hpet->hpet_mc;
-		clocksource_hpet.archdata.fsys_mmio = hpet_mctr;
+		ia64_fsys_mmio = hpet_mctr;
 		clocksource_register_hz(&clocksource_hpet, hpetp->hp_tick_freq);
 		hpetp->hp_clocksource = &clocksource_hpet;
 		hpet_clocksource = &clocksource_hpet;

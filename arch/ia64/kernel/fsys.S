@@ -127,8 +127,8 @@ ENTRY(fsys_set_tid_address)
 	FSYS_RETURN
 END(fsys_set_tid_address)
 
-#if IA64_GTOD_SEQ_OFFSET !=0
-#error fsys_gettimeofday incompatible with changes to struct fsyscall_gtod_data_t
+#if IA64_VDSO_SEQ_OFFSET !=0
+#error fsys_gettimeofday incompatible with changes to struct vdso_time_data
 #endif
 #if IA64_ITC_JITTER_OFFSET !=0
 #error fsys_gettimeofday incompatible with changes to struct itc_jitter_data_t
@@ -164,25 +164,25 @@ ENTRY(fsys_gettimeofday)
 	// r17 = (not used)
 	// r18 = (not used)
 	// r19 = address of itc_lastcycle
-	// r20 = struct fsyscall_gtod_data (= address of gtod_lock.sequence)
-	// r21 = address of mmio_ptr
+	// r20 = struct vdso_time_data * (= address of vdso seq/clock_mode/...)
+	// r21 = address of ia64_fsys_mmio (fixed across retries)
 	// r22 = address of wall_time or monotonic_time
 	// r23 = address of shift / value
 	// r24 = address mult factor / cycle_last value
 	// r25 = itc_lastcycle value
 	// r26 = address clocksource cycle_last
-	// r27 = (not used)
+	// r27 = MMIO counter address (dereferenced ia64_fsys_mmio)
 	// r28 = sequence number at the beginning of critical section
 	// r29 = address of itc_jitter
-	// r30 = time processing flags / memory address
+	// r30 = time processing flags / vdso clock_mode value
 	// r31 = pointer to result
 	// Predicates
 	// p6,p7 short term use
 	// p8 = timesource ar.itc
 	// p9 = timesource mmio64
-	// p10 = timesource mmio32 - not used
-	// p11 = timesource not to be handled by asm code
-	// p12 = memory time source ( = p9 | p10) - not used
+	// p10 = (not used)
+	// p11 = current clocksource not vdso-capable, use real syscall
+	// p12 = (not used)
 	// p13 = do cmpxchg with itc_lastcycle
 	// p14 = Divide by 1000
 	// p15 = Add monotonic
@@ -194,51 +194,57 @@ ENTRY(fsys_gettimeofday)
 	add r2 = TI_FLAGS+IA64_TASK_SIZE,r16
 	tnat.nz p6,p0 = r31		// guard against Nat argument
 (p6)	br.cond.spnt.few .fail_einval
-	movl r20 = fsyscall_gtod_data // load fsyscall gettimeofday data address
+	movl r20 = vdso_k_time_data	// load address of the vdso data pointer
 	;;
 	ld4 r2 = [r2]			// process work pending flags
+	ld8 r20 = [r20]		// dereference: r20 = struct vdso_time_data *
 	movl r29 = itc_jitter_data	// itc_jitter
-	add r22 = IA64_GTOD_WALL_TIME_OFFSET,r20	// wall_time
-	add r21 = IA64_CLKSRC_MMIO_OFFSET,r20
+	movl r21 = ia64_fsys_mmio	// address of MMIO clocksource pointer
 	mov pr = r30,0xc000	// Set predicates according to function
 	;;
 	and r2 = TIF_ALLWORK_MASK,r2
 	add r19 = IA64_ITC_LASTCYCLE_OFFSET,r29
-(p15)	add r22 = IA64_GTOD_MONO_TIME_OFFSET,r20	// monotonic_time
+	add r22 = IA64_VDSO_WALL_TIME_OFFSET,r20	// wall_time
 	;;
-	add r26 = IA64_CLKSRC_CYCLE_LAST_OFFSET,r20	// clksrc_cycle_last
+(p15)	add r22 = IA64_VDSO_MONO_TIME_OFFSET,r20	// monotonic_time
+	add r26 = IA64_VDSO_CYCLE_LAST_OFFSET,r20	// clksrc_cycle_last
 	cmp.ne p6, p0 = 0, r2	// Fallback if work is scheduled
 (p6)	br.cond.spnt.many fsys_fallback_syscall
 	;;
 	// Begin critical section
 .time_redo:
-	ld4.acq r28 = [r20]	// gtod_lock.sequence, Must take first
+	ld4.acq r28 = [r20]	// vdso seq, Must take first
 	;;
 	and r28 = ~1,r28	// And make sequence even to force retry if odd
+	add r14 = IA64_VDSO_CLOCK_MODE_OFFSET,r20
 	;;
-	ld8 r30 = [r21]		// clocksource->mmio_ptr
-	add r24 = IA64_CLKSRC_MULT_OFFSET,r20
-	ld4 r2 = [r29]		// itc_jitter value
-	add r23 = IA64_CLKSRC_SHIFT_OFFSET,r20
-	add r14 = IA64_CLKSRC_MASK_OFFSET,r20
+	ld4 r30 = [r14]		// current vdso clock_mode
+	add r24 = IA64_VDSO_MULT_OFFSET,r20
+	add r23 = IA64_VDSO_SHIFT_OFFSET,r20
+	add r14 = IA64_VDSO_MASK_OFFSET,r20
 	;;
+	cmp.eq p11,p0 = IA64_VDSO_CLOCKMODE_NONE,r30	// no vdso-capable clocksource
+(p11)	br.cond.spnt.many fsys_fallback_syscall
+	;;
+	cmp.eq p8,p9 = IA64_VDSO_CLOCKMODE_ITC,r30	// p8 = ITC, p9 = MMIO (only two left)
 	ld4 r3 = [r24]		// clocksource mult value
 	ld8 r14 = [r14]         // clocksource mask value
-	cmp.eq p8,p9 = 0,r30	// use cpu timer if no mmio_ptr
+	ld4 r2 = [r29]		// itc_jitter value
 	;;
 	setf.sig f7 = r3	// Setup for mult scaling of counter
 (p8)	cmp.ne p13,p0 = r2,r0	// need itc_jitter compensation, set p13
+(p9)	cmp.ne p13,p0 = r0,r0	// MMIO source: clear p13 jitter control
 	ld4 r23 = [r23]		// clocksource shift value
 	ld8 r24 = [r26]		// get clksrc_cycle_last value
-(p9)	cmp.eq p13,p0 = 0,r30	// if mmio_ptr, clear p13 jitter control
+(p9)	ld8 r27 = [r21]		// dereference ia64_fsys_mmio pointer
 	;;
 	.pred.rel.mutex p8,p9
 	MOV_FROM_ITC(p8, p6, r2, r10)	// CPU_TIMER. 36 clocks latency!!!
-(p9)	ld8 r2 = [r30]		// MMIO_TIMER. Could also have latency issues..
+(p9)	ld8 r2 = [r27]		// MMIO_TIMER. Could also have latency issues..
 (p13)	ld8 r25 = [r19]		// get itc_lastcycle value
-	ld8 r9 = [r22],IA64_TIME_SN_SPEC_SNSEC_OFFSET	// sec
+	ld8 r9 = [r22],IA64_VDSO_TIMESTAMP_NSEC_OFFSET	// sec
 	;;
-	ld8 r8 = [r22],-IA64_TIME_SN_SPEC_SNSEC_OFFSET	// snsec
+	ld8 r8 = [r22],-IA64_VDSO_TIMESTAMP_NSEC_OFFSET	// snsec
 (p13)	sub r3 = r25,r2		// Diff needed before comparison (thanks davidm)
 	;;
 (p13)	cmp.gt.unc p6,p7 = r3,r0 // check if it is less than last. p6,p7 cleared
@@ -265,7 +271,7 @@ EX(.fail_efault, probe.w.fault r31, 3)
 	getf.sig r2 = f8
 	mf
 	;;
-	ld4 r10 = [r20]		// gtod_lock.sequence
+	ld4 r10 = [r20]		// vdso seq (IA64_VDSO_SEQ_OFFSET == 0)
 	add r8 = r8,r2		// Add xtime.nsecs
 	;;
 	shr.u r8 = r8,r23	// shift by factor

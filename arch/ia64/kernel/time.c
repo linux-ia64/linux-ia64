@@ -21,7 +21,7 @@
 #include <linux/interrupt.h>
 #include <linux/efi.h>
 #include <linux/timex.h>
-#include <linux/timekeeper_internal.h>
+#include <linux/clocksource.h>
 #include <linux/platform_device.h>
 #include <linux/sched/cputime.h>
 
@@ -38,9 +38,9 @@
 
 static u64 itc_get_cycles(struct clocksource *cs);
 
-struct fsyscall_gtod_data_t fsyscall_gtod_data;
-
 struct itc_jitter_data_t itc_jitter_data;
+
+void *ia64_fsys_mmio;
 
 volatile int time_keeper_id = 0; /* smp_processor_id() of time-keeper */
 
@@ -57,6 +57,7 @@ static struct clocksource clocksource_itc = {
 	.read           = itc_get_cycles,
 	.mask           = CLOCKSOURCE_MASK(64),
 	.flags          = CLOCK_SOURCE_IS_CONTINUOUS,
+	.vdso_clock_mode = VDSO_CLOCKMODE_ITC,
 };
 static struct clocksource *itc_clocksource;
 
@@ -425,39 +426,4 @@ udelay (unsigned long usecs)
 }
 EXPORT_SYMBOL(udelay);
 
-/* IA64 doesn't cache the timezone */
-void update_vsyscall_tz(void)
-{
-}
-
-void update_vsyscall(struct timekeeper *tk)
-{
-	write_seqcount_begin(&fsyscall_gtod_data.seq);
-
-	/* copy vsyscall data */
-	fsyscall_gtod_data.clk_mask = tk->tkr_mono.mask;
-	fsyscall_gtod_data.clk_mult = tk->tkr_mono.mult;
-	fsyscall_gtod_data.clk_shift = tk->tkr_mono.shift;
-	fsyscall_gtod_data.clk_fsys_mmio = tk->tkr_mono.clock->archdata.fsys_mmio;
-	fsyscall_gtod_data.clk_cycle_last = tk->tkr_mono.cycle_last;
-
-	fsyscall_gtod_data.wall_time.sec = tk->xtime_sec;
-	fsyscall_gtod_data.wall_time.snsec = tk->tkr_mono.xtime_nsec;
-
-	fsyscall_gtod_data.monotonic_time.sec = tk->xtime_sec
-					      + tk->wall_to_monotonic.tv_sec;
-	fsyscall_gtod_data.monotonic_time.snsec = tk->tkr_mono.xtime_nsec
-						+ ((u64)tk->wall_to_monotonic.tv_nsec
-							<< tk->tkr_mono.shift);
-
-	/* normalize */
-	while (fsyscall_gtod_data.monotonic_time.snsec >=
-					(((u64)NSEC_PER_SEC) << tk->tkr_mono.shift)) {
-		fsyscall_gtod_data.monotonic_time.snsec -=
-					((u64)NSEC_PER_SEC) << tk->tkr_mono.shift;
-		fsyscall_gtod_data.monotonic_time.sec++;
-	}
-
-	write_seqcount_end(&fsyscall_gtod_data.seq);
-}
 

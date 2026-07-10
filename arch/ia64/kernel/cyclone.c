@@ -6,6 +6,7 @@
 #include <linux/timex.h>
 #include <linux/clocksource.h>
 #include <linux/io.h>
+#include <asm/clocksource.h>
 #include <asm/cyclone.h>
 
 /* IBM Summit (EXA) Cyclone counter code*/
@@ -34,6 +35,7 @@ static struct clocksource clocksource_cyclone = {
         .read           = read_cyclone,
         .mask           = (1LL << 40) - 1,
         .flags          = CLOCK_SOURCE_IS_CONTINUOUS,
+        .vdso_clock_mode = VDSO_CLOCKMODE_MMIO,
 };
 
 static int __init init_cyclone_clock(void)
@@ -117,7 +119,7 @@ static int __init init_cyclone_clock(void)
 	}
 	/* initialize last tick */
 	cyclone_mc = cyclone_timer;
-	clocksource_cyclone.archdata.fsys_mmio = cyclone_timer;
+	ia64_fsys_mmio = cyclone_timer;
 	clocksource_register_hz(&clocksource_cyclone, CYCLONE_TIMER_FREQ);
 
 	return 0;

@@ -4,8 +4,7 @@
 #ifndef _ASM_IA64_CLOCKSOURCE_H
 #define _ASM_IA64_CLOCKSOURCE_H
 
-struct arch_clocksource_data {
-	void *fsys_mmio;        /* used by fsyscall asm code */
-};
+/* MMIO clocksource address used by the fsys_gettimeofday fast path */
+extern void *ia64_fsys_mmio;
 
 #endif /* _ASM_IA64_CLOCKSOURCE_H */

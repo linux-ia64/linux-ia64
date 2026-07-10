@@ -17,6 +17,7 @@
 #include <asm/siginfo.h>
 #include <asm/sigcontext.h>
 #include <asm/mca.h>
+#include <vdso/datapage.h>
 
 #include "../kernel/sigframe.h"
 #include "../kernel/fsyscall_gtod_data.h"
@@ -215,8 +216,6 @@ void foo(void)
 	BLANK();
 	DEFINE(IA64_TIMESPEC_TV_NSEC_OFFSET,
 	       offsetof (struct __kernel_old_timespec, tv_nsec));
-	DEFINE(IA64_TIME_SN_SPEC_SNSEC_OFFSET,
-	       offsetof (struct time_sn_spec, snsec));
 
 	DEFINE(CLONE_SETTLS_BIT, 19);
 #if CLONE_SETTLS != (1<<19)
@@ -268,22 +267,29 @@ void foo(void)
 	BLANK();
 
 	/* used by fsys_gettimeofday in arch/ia64/kernel/fsys.S */
-	DEFINE(IA64_GTOD_SEQ_OFFSET,
-	       offsetof (struct fsyscall_gtod_data_t, seq));
-	DEFINE(IA64_GTOD_WALL_TIME_OFFSET,
-		offsetof (struct fsyscall_gtod_data_t, wall_time));
-	DEFINE(IA64_GTOD_MONO_TIME_OFFSET,
-		offsetof (struct fsyscall_gtod_data_t, monotonic_time));
-	DEFINE(IA64_CLKSRC_MASK_OFFSET,
-		offsetof (struct fsyscall_gtod_data_t, clk_mask));
-	DEFINE(IA64_CLKSRC_MULT_OFFSET,
-		offsetof (struct fsyscall_gtod_data_t, clk_mult));
-	DEFINE(IA64_CLKSRC_SHIFT_OFFSET,
-		offsetof (struct fsyscall_gtod_data_t, clk_shift));
-	DEFINE(IA64_CLKSRC_MMIO_OFFSET,
-		offsetof (struct fsyscall_gtod_data_t, clk_fsys_mmio));
-	DEFINE(IA64_CLKSRC_CYCLE_LAST_OFFSET,
-		offsetof (struct fsyscall_gtod_data_t, clk_cycle_last));
+	DEFINE(IA64_VDSO_SEQ_OFFSET,
+		offsetof (struct vdso_time_data, clock_data[CS_HRES_COARSE].seq));
+	DEFINE(IA64_VDSO_CLOCK_MODE_OFFSET,
+		offsetof (struct vdso_time_data, clock_data[CS_HRES_COARSE].clock_mode));
+	DEFINE(IA64_VDSO_CYCLE_LAST_OFFSET,
+		offsetof (struct vdso_time_data, clock_data[CS_HRES_COARSE].cycle_last));
+	DEFINE(IA64_VDSO_MASK_OFFSET,
+		offsetof (struct vdso_time_data, clock_data[CS_HRES_COARSE].mask));
+	DEFINE(IA64_VDSO_MULT_OFFSET,
+		offsetof (struct vdso_time_data, clock_data[CS_HRES_COARSE].mult));
+	DEFINE(IA64_VDSO_SHIFT_OFFSET,
+		offsetof (struct vdso_time_data, clock_data[CS_HRES_COARSE].shift));
+	DEFINE(IA64_VDSO_WALL_TIME_OFFSET,
+		offsetof (struct vdso_time_data,
+			  clock_data[CS_HRES_COARSE].basetime[CLOCK_REALTIME]));
+	DEFINE(IA64_VDSO_MONO_TIME_OFFSET,
+		offsetof (struct vdso_time_data,
+			  clock_data[CS_HRES_COARSE].basetime[CLOCK_MONOTONIC]));
+	DEFINE(IA64_VDSO_TIMESTAMP_NSEC_OFFSET,
+		offsetof (struct vdso_timestamp, nsec));
+	DEFINE(IA64_VDSO_CLOCKMODE_NONE, VDSO_CLOCKMODE_NONE);
+	DEFINE(IA64_VDSO_CLOCKMODE_ITC, VDSO_CLOCKMODE_ITC);
+	DEFINE(IA64_VDSO_CLOCKMODE_MMIO, VDSO_CLOCKMODE_MMIO);
 	DEFINE(IA64_ITC_JITTER_OFFSET,
 		offsetof (struct itc_jitter_data_t, itc_jitter));
 	DEFINE(IA64_ITC_LASTCYCLE_OFFSET,
