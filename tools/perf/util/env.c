@@ -667,6 +667,7 @@ static const struct arch_to_e_machine prefix_to_e_machine[] = {
 	{"i486", EM_386},
 	{"i586", EM_386},
 	{"i686", EM_386},
+	{"ia64", EM_IA_64},
 	{"loongarch", EM_LOONGARCH},
 	{"m32r", EM_M32R},
 	{"m68k", EM_68K},

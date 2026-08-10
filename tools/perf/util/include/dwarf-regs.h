@@ -52,6 +52,8 @@
   #define EM_HOST EM_CRIS
 #elif defined(__hppa__) // HP PA-RISC
   #define EM_HOST EM_PARISC
+#elif defined(__ia64__)
+  #define EM_HOST EM_IA_64
 #elif defined(__loongarch__)
   #define EM_HOST EM_LOONGARCH
 #elif defined(__mips__)

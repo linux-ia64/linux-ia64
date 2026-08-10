@@ -111,6 +111,7 @@ struct annotate_args {
 const struct arch *arch__find(uint16_t e_machine, uint32_t e_flags, const char *cpuid);
 bool arch__is_x86(const struct arch *arch);
 bool arch__is_powerpc(const struct arch *arch);
+bool arch__is_ia64(const struct arch *arch);
 
 extern const struct ins_ops call_ops;
 extern const struct ins_ops dec_ops;
@@ -126,6 +127,7 @@ const struct arch *arch__new_arc(const struct e_machine_and_e_flags *id, const c
 const struct arch *arch__new_arm(const struct e_machine_and_e_flags *id, const char *cpuid);
 const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id, const char *cpuid);
 const struct arch *arch__new_csky(const struct e_machine_and_e_flags *id, const char *cpuid);
+const struct arch *arch__new_ia64(const struct e_machine_and_e_flags *id, const char *cpuid);
 const struct arch *arch__new_loongarch(const struct e_machine_and_e_flags *id, const char *cpuid);
 const struct arch *arch__new_mips(const struct e_machine_and_e_flags *id, const char *cpuid);
 const struct arch *arch__new_powerpc(const struct e_machine_and_e_flags *id, const char *cpuid);
@@ -154,6 +156,10 @@ int ins__raw_scnprintf(const struct ins *ins, char *bf, size_t size,
 			   struct ins_operands *ops, int max_ins_name);
 int ins__scnprintf(const struct ins *ins, char *bf, size_t size,
 		   struct ins_operands *ops, int max_ins_name);
+int call__parse(const struct arch *arch, struct ins_operands *ops,
+		struct map_symbol *ms, struct disasm_line *dl);
+int jump__parse(const struct arch *arch, struct ins_operands *ops,
+		struct map_symbol *ms, struct disasm_line *dl);
 int call__scnprintf(const struct ins *ins, char *bf, size_t size,
 		    struct ins_operands *ops, int max_ins_name);
 int jump__scnprintf(const struct ins *ins, char *bf, size_t size,

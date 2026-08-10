@@ -144,6 +144,7 @@ const struct arch *arch__find(uint16_t e_machine, uint32_t e_flags, const char *
 		[EM_ARM]	= arch__new_arm,
 		[EM_AARCH64]	= arch__new_arm64,
 		[EM_CSKY]	= arch__new_csky,
+		[EM_IA_64]	= arch__new_ia64,
 		[EM_LOONGARCH]	= arch__new_loongarch,
 		[EM_MIPS]	= arch__new_mips,
 		[EM_PPC64]	= arch__new_powerpc,
@@ -203,6 +204,11 @@ bool arch__is_powerpc(const struct arch *arch)
 	return arch->id.e_machine == EM_PPC || arch->id.e_machine == EM_PPC64;
 }
 
+bool arch__is_ia64(const struct arch *arch)
+{
+	return arch->id.e_machine == EM_IA_64;
+}
+
 static void ins_ops__delete(struct ins_operands *ops)
 {
 	if (ops == NULL)
@@ -236,7 +242,7 @@ bool ins__is_fused(const struct arch *arch, const char *ins1, const char *ins2)
 	return arch->ins_is_fused(arch, ins1, ins2);
 }
 
-static int call__parse(const struct arch *arch, struct ins_operands *ops, struct map_symbol *ms,
+int call__parse(const struct arch *arch, struct ins_operands *ops, struct map_symbol *ms,
 		struct disasm_line *dl __maybe_unused)
 {
 	char *endptr, *tok, *name;
@@ -335,7 +341,7 @@ static inline const char *validate_comma(const char *c, struct ins_operands *ops
 	return c;
 }
 
-static int jump__parse(const struct arch *arch, struct ins_operands *ops, struct map_symbol *ms,
+int jump__parse(const struct arch *arch, struct ins_operands *ops, struct map_symbol *ms,
 		struct disasm_line *dl __maybe_unused)
 {
 	struct map *map = ms->map;
@@ -857,6 +863,54 @@ out:
 }
 
 /*
+ * ia64 objdump emits one line per bundle slot.  The slot 0 line carries the
+ * bundle template and any line may carry a qualifying predicate:
+ *
+ *   a0000001006fb480:	[MMI]       alloc r41=ar.pfs,18,11,0
+ *   a0000001006fb4fc:	      (p06) br.cond.dpnt.few a0000001006fbc40 <vfs_read+0x7c0>;;
+ *   a0000001006fb500:	[BBB] (p09) br.cond.dpnt.few a0000001006fb7a0 <vfs_read+0x320>
+ *
+ * Skip both prefixes so that the mnemonic is found where the generic parser
+ * expects it.  Only the pointer moves: dl->al.line still holds the complete
+ * original text and is what gets displayed.
+ */
+static int disasm_line__parse_ia64(char *line, const char **namep, char **rawp)
+{
+	char *name = skip_spaces(line), *end;
+	size_t len;
+
+	/* Bundle template: "[MMI]", "[MLX]", "[BBB]", ... */
+	if (name[0] == '[') {
+		end = strchr(name, ']');
+		if (end == NULL)
+			return -1;
+		name = skip_spaces(end + 1);
+	}
+
+	/* Qualifying predicate: "(p06)". */
+	if (name[0] == '(') {
+		end = strchr(name, ')');
+		if (end == NULL)
+			return -1;
+		name = skip_spaces(end + 1);
+	}
+
+	/* Nothing but prefixes? Parse the line as-is rather than dropping it. */
+	if (name[0] == '\0')
+		name = skip_spaces(line);
+
+	if (disasm_line__parse(name, namep, rawp) < 0)
+		return -1;
+
+	/* A stop bit may be glued to an operand-less mnemonic: "br.ret...;;". */
+	len = strlen(*namep);
+	if (len > 2 && !strcmp(*namep + len - 2, ";;"))
+		((char *)*namep)[len - 2] = '\0';
+
+	return 0;
+}
+
+/*
  * Parses the result captured from symbol__disassemble_*
  * Example, line read from DSO file in powerpc:
  * line:    38 01 81 e8
@@ -957,6 +1011,10 @@ struct disasm_line *disasm_line__new(struct annotate_args *args)
 	if (args->offset != -1) {
 		if (arch__is_powerpc(args->arch)) {
 			if (disasm_line__parse_powerpc(dl, args) < 0)
+				goto out_free_line;
+		} else if (arch__is_ia64(args->arch)) {
+			if (disasm_line__parse_ia64(dl->al.line, &dl->ins.name,
+						    &dl->ops.raw) < 0)
 				goto out_free_line;
 		} else if (disasm_line__parse(dl->al.line, &dl->ins.name, &dl->ops.raw) < 0)
 			goto out_free_line;

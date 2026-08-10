@@ -39,6 +39,16 @@ static const char *const arm64_triplets[] = {
 	NULL
 };
 
+static const char *const ia64_triplets[] = {
+	"ia64-linux-gnu-",
+	"ia64-unknown-linux-gnu-",
+	"ia64-epic-linux-gnu-",
+	"ia64-t2-linux-gnu-",
+	"ia64-slackware-linux-",
+	"ia64-linux-",
+	NULL
+};
+
 static const char *const powerpc_triplets[] = {
 	"powerpc-unknown-linux-gnu-",
 	"powerpc-linux-gnu-",
@@ -214,6 +224,9 @@ static int perf_env__lookup_binutils_path(struct perf_env *env,
 	case EM_AARCH64:
 		path_list = arm64_triplets;
 		break;
+	case EM_IA_64:
+		path_list = ia64_triplets;
+		break;
 	case EM_PPC:
 	case EM_PPC64:
 		path_list = powerpc_triplets;
@@ -285,5 +298,6 @@ bool perf_env__single_address_space(struct perf_env *env)
 {
 	uint16_t e_machine = perf_env__e_machine(env, /*e_flags=*/NULL);
 
-	return e_machine != EM_SPARC && e_machine != EM_SPARCV9 && e_machine != EM_S390;
+	return e_machine != EM_SPARC && e_machine != EM_SPARCV9 &&
+	       e_machine != EM_S390 && e_machine != EM_IA_64;
 }
