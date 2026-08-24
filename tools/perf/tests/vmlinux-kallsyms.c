@@ -27,6 +27,7 @@ static bool is_ignored_symbol(const char *name, char type)
 		 * stable symbol list.
 		 */
 		"kallsyms_offsets",
+		"kallsyms_relative_base",
 		"kallsyms_num_syms",
 		"kallsyms_names",
 		"kallsyms_markers",
