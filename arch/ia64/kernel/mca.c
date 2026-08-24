@@ -1554,7 +1554,7 @@ ia64_mca_cpe_int_caller(int cpe_irq, void *arg)
 
 	cpuid = cpumask_next(cpuid+1, cpu_online_mask);
 
-	if (cpuid < NR_CPUS) {
+	if (cpuid < nr_cpu_ids) {
 		ia64_send_ipi(cpuid, IA64_CPEP_VECTOR, IA64_IPI_DM_INT, 0);
 	} else {
 		/*
