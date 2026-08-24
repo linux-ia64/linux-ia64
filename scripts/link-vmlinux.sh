@@ -115,6 +115,10 @@ kallsyms()
 		kallsymopt="${kallsymopt} --all-symbols"
 	fi
 
+	if is_enabled CONFIG_KALLSYMS_BASE_RELATIVE; then
+		kallsymopt="${kallsymopt} --base-relative"
+	fi
+
 	info KSYMS "${2}.S"
 	scripts/kallsyms ${kallsymopt} "${1}" > "${2}.S"
 

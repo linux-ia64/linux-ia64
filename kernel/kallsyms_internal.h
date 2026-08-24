@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 
+extern const unsigned long kallsyms_addresses[];
 extern const int kallsyms_offsets[];
 extern const u8 kallsyms_names[];
 

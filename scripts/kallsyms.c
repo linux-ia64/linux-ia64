@@ -5,7 +5,7 @@
  * This software may be used and distributed according to the terms
  * of the GNU General Public License, incorporated herein by reference.
  *
- * Usage: kallsyms [--all-symbols] in.map > out.S
+ * Usage: kallsyms [--all-symbols] [--base-relative] in.map > out.S
  *
  *      Table compression uses all the unused char codes on the symbols and
  *  maps these to the most used substrings (tokens). For instance, it might
@@ -57,6 +57,7 @@ static struct addr_range text_ranges[] = {
 static struct sym_entry **table;
 static unsigned int table_size, table_cnt;
 static int all_symbols;
+static int base_relative;
 
 static int token_profit[0x10000];
 
@@ -67,7 +68,8 @@ static unsigned char best_table_len[256];
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: kallsyms [--all-symbols] in.map > out.S\n");
+	fprintf(stderr, "Usage: kallsyms [--all-symbols] "
+			"[--base-relative] in.map > out.S\n");
 	exit(1);
 }
 
@@ -284,6 +286,15 @@ static void output_label(const char *label)
 	printf("%s:\n", label);
 }
 
+/* Provide proper symbols relocatability by their '_text' relativeness. */
+static void output_address(unsigned long long addr)
+{
+	if (_text <= addr)
+		printf("\tPTR\t_text + %#llx\n", addr - _text);
+	else
+		printf("\tPTR\t_text - %#llx\n", _text - addr);
+}
+
 /* uncompress a compressed symbol. When this function is called, the best table
  * might still be compressed itself, so the function needs to be recursive */
 static int expand_symbol(const unsigned char *data, int len, char *result)
@@ -431,36 +442,41 @@ static void write_src(void)
 		printf("\t.short\t%d\n", best_idx[i]);
 	printf("\n");
 
-	output_label("kallsyms_offsets");
+	if (!base_relative)
+		output_label("kallsyms_addresses");
+	else
+		output_label("kallsyms_offsets");
 
 	for (i = 0; i < table_cnt; i++) {
-		/*
-		 * Use the offset relative to the lowest value
-		 * encountered of all relative symbols, and emit
-		 * non-relocatable fixed offsets that will be fixed
-		 * up at runtime.
-		 */
+		if (base_relative) {
+			/*
+			 * Use the offset relative to the lowest value
+			 * encountered of all relative symbols, and emit
+			 * non-relocatable fixed offsets that will be fixed
+			 * up at runtime.
+			 */
 
-		long long offset;
+			long long offset;
 
-		offset = table[i]->addr - relative_base;
-		if (offset < 0 || offset > UINT_MAX) {
-			fprintf(stderr, "kallsyms failure: "
-				"relative symbol value %#llx out of range\n",
-				table[i]->addr);
-			exit(EXIT_FAILURE);
+			offset = table[i]->addr - relative_base;
+			if (offset < 0 || offset > UINT_MAX) {
+				fprintf(stderr, "kallsyms failure: "
+					"relative symbol value %#llx out of range\n",
+					table[i]->addr);
+				exit(EXIT_FAILURE);
+			}
+			printf("\t.long\t%#x\t/* %s */\n", (int)offset, table[i]->sym);
+		} else {
+			output_address(table[i]->addr);
 		}
-		printf("\t.long\t%#x\t/* %s */\n", (int)offset, table[i]->sym);
 	}
 	printf("\n");
 
-	output_label("kallsyms_relative_base");
-	/* Provide proper symbols relocatability by their '_text' relativeness. */
-	if (_text <= relative_base)
-		printf("\tPTR\t_text + %#llx\n", relative_base - _text);
-	else
-		printf("\tPTR\t_text - %#llx\n", _text - relative_base);
-	printf("\n");
+	if (base_relative) {
+		output_label("kallsyms_relative_base");
+		output_address(relative_base);
+		printf("\n");
+	}
 
 	sort_symbols_by_name();
 	output_label("kallsyms_seqs_of_names");
@@ -717,6 +733,7 @@ int main(int argc, char **argv)
 	while (1) {
 		static const struct option long_options[] = {
 			{"all-symbols",     no_argument, &all_symbols,     1},
+			{"base-relative",   no_argument, &base_relative,   1},
 			{},
 		};
 
@@ -734,7 +751,8 @@ int main(int argc, char **argv)
 	read_map(argv[optind]);
 	shrink_table();
 	sort_symbols();
-	record_relative_base();
+	if (base_relative)
+		record_relative_base();
 	optimize_token_table();
 	write_src();
 
