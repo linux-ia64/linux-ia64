@@ -349,6 +349,37 @@ static inline void smp_setup_percpu_timer(void)
 {
 }
 
+/*
+ * Set up the sibling and core maps for @cpu.  @cpu is not online yet, so its
+ * own bit is set explicitly rather than as a side effect of the i == cpu
+ * iteration of the for_each_online_cpu() loop below.
+ */
+static void set_cpu_sibling_map(int cpu)
+{
+	int i;
+
+	cpumask_set_cpu(cpu, &cpu_core_map[cpu]);
+	cpumask_set_cpu(cpu, &per_cpu(cpu_sibling_map, cpu));
+
+	if (cpu_data(cpu)->threads_per_core == 1 &&
+	    cpu_data(cpu)->cores_per_socket == 1)
+		return;
+
+	for_each_online_cpu(i) {
+		if (i == cpu)
+			continue;
+		if (cpu_data(cpu)->socket_id != cpu_data(i)->socket_id)
+			continue;
+
+		cpumask_set_cpu(i, &cpu_core_map[cpu]);
+		cpumask_set_cpu(cpu, &cpu_core_map[i]);
+		if (cpu_data(cpu)->core_id == cpu_data(i)->core_id) {
+			cpumask_set_cpu(i, &per_cpu(cpu_sibling_map, cpu));
+			cpumask_set_cpu(cpu, &per_cpu(cpu_sibling_map, i));
+		}
+	}
+}
+
 static void
 smp_callin (void)
 {
@@ -374,6 +405,12 @@ smp_callin (void)
 	 */
 	set_numa_node(cpu_to_node_map[cpuid]);
 	set_numa_mem(local_memory_node(cpu_to_node_map[cpuid]));
+
+	/*
+	 * The topology masks must be valid before notify_cpu_starting(), which
+	 * runs the scheduler's CPU-starting callbacks.
+	 */
+	set_cpu_sibling_map(cpuid);
 
 	spin_lock(&vector_lock);
 	/* Setup the per cpu irq handling data structures */
@@ -693,24 +730,6 @@ smp_cpus_done (unsigned int dummy)
 	       (int)num_online_cpus(), bogosum/(500000/HZ), (bogosum/(5000/HZ))%100);
 }
 
-static inline void set_cpu_sibling_map(int cpu)
-{
-	int i;
-
-	for_each_online_cpu(i) {
-		if ((cpu_data(cpu)->socket_id == cpu_data(i)->socket_id)) {
-			cpumask_set_cpu(i, &cpu_core_map[cpu]);
-			cpumask_set_cpu(cpu, &cpu_core_map[i]);
-			if (cpu_data(cpu)->core_id == cpu_data(i)->core_id) {
-				cpumask_set_cpu(i,
-						&per_cpu(cpu_sibling_map, cpu));
-				cpumask_set_cpu(cpu,
-						&per_cpu(cpu_sibling_map, i));
-			}
-		}
-	}
-}
-
 int
 __cpu_up(unsigned int cpu, struct task_struct *tidle)
 {
@@ -734,15 +753,7 @@ __cpu_up(unsigned int cpu, struct task_struct *tidle)
 	if (ret < 0)
 		return ret;
 
-	if (cpu_data(cpu)->threads_per_core == 1 &&
-	    cpu_data(cpu)->cores_per_socket == 1) {
-		cpumask_set_cpu(cpu, &per_cpu(cpu_sibling_map, cpu));
-		cpumask_set_cpu(cpu, &cpu_core_map[cpu]);
-		return 0;
-	}
-
-	set_cpu_sibling_map(cpu);
-
+	/* The sibling and core maps were set up by the AP in smp_callin(). */
 	return 0;
 }
 
