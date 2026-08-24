@@ -137,11 +137,17 @@ static void cache_shared_cpu_map_setup(unsigned int cpu,
 		return;
 	}
 
-	if (ia64_pal_cache_shared_info(this_leaf->level,
+	/*
+	 * PAL_CACHE_SHARED_INFO takes a zero-based cache level, just like
+	 * PAL_CACHE_INFO does, while this_leaf->level is one-based.
+	 */
+	if (ia64_pal_cache_shared_info(this_leaf->level - 1,
 					this_leaf->type,
 					0,
-					&csi) != PAL_STATUS_SUCCESS)
+					&csi) != PAL_STATUS_SUCCESS) {
+		cpumask_set_cpu(cpu, &this_leaf->shared_cpu_map);
 		return;
+	}
 
 	num_shared = (int) csi.num_shared;
 	do {
@@ -153,7 +159,7 @@ static void cache_shared_cpu_map_setup(unsigned int cpu,
 
 		i++;
 	} while (i < num_shared &&
-		ia64_pal_cache_shared_info(this_leaf->level,
+		ia64_pal_cache_shared_info(this_leaf->level - 1,
 				this_leaf->type,
 				i,
 				&csi) == PAL_STATUS_SUCCESS);
