@@ -57,12 +57,14 @@ extern void copy_page (void *to, void *from);
 do {						\
 	clear_page(addr);			\
 	flush_dcache_page(page);		\
+	(void)(vaddr);				\
 } while (0)
 
 #define copy_user_page(to, from, vaddr, page)	\
 do {						\
 	copy_page((to), (from));		\
 	flush_dcache_page(page);		\
+	(void)(vaddr);				\
 } while (0)
 
 
