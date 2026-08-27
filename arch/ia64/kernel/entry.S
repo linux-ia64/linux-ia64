@@ -157,6 +157,34 @@ GLOBAL_ENTRY(sys_clone)
 END(sys_clone)
 
 /*
+ * ia64_clone3(struct clone_args __user *uargs, size_t size)
+ *
+ *	clone3() has to go through an assembly stub like sys_clone2() does:
+ *	copy_thread() picks up the parent's switch_stack from just below its
+ *	pt_regs, so a full switch stack (and, with it, a flushed register
+ *	backing store) has to be on the kernel stack before we get there.
+ */
+GLOBAL_ENTRY(ia64_clone3)
+	/*
+	 * Allocate 8 input registers since ptrace() may clobber them
+	 */
+	.prologue ASM_UNW_PRLG_RP|ASM_UNW_PRLG_PFS, ASM_UNW_PRLG_GRSAVE(8)
+	alloc r16=ar.pfs,8,2,2,0
+	DO_SAVE_SWITCH_STACK
+	mov loc0=rp
+	mov loc1=r16				// save ar.pfs across sys_clone3
+	.body
+	mov out0=in0
+	mov out1=in1
+	br.call.sptk.many rp=sys_clone3
+.ret5:	.restore sp
+	adds sp=IA64_SWITCH_STACK_SIZE,sp	// pop the switch stack
+	mov ar.pfs=loc1
+	mov rp=loc0
+	br.ret.sptk.many rp
+END(ia64_clone3)
+
+/*
  * prev_task <- ia64_switch_to(struct task_struct *next)
  *	With Ingo's new scheduler, interrupts are disabled when this routine gets
  *	called.  The code starting at .map relies on this.  The rest of the code
