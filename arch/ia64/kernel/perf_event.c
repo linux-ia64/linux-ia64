@@ -74,11 +74,17 @@ struct ia64_pmu_model {
 };
 
 #include "perf_event_gen.h"
+#include "perf_event_ita.h"
+#include "perf_event_mck.h"
+#include "perf_event_mont.h"
 
 /*
  * Probed in family order, generic last: it matches anything.
  */
 static struct ia64_pmu_model * const ia64_pmu_models[] = {
+	&ia64_pmu_ita,
+	&ia64_pmu_mck,
+	&ia64_pmu_mont,
 	&ia64_pmu_gen,
 };
 
@@ -459,17 +465,32 @@ static irqreturn_t ia64_pmu_interrupt(int irq, void *arg)
 PMU_FORMAT_ATTR(event,	"config:8-15");
 PMU_FORMAT_ATTR(umask,	"config:16-19");
 PMU_FORMAT_ATTR(thres,	"config:20-22");
+PMU_FORMAT_ATTR(all,	"config:26");
+PMU_FORMAT_ATTR(mesi,	"config:27-30");
 
 static struct attribute *ia64_pmu_format_attrs[] = {
 	&format_attr_event.attr,
 	&format_attr_umask.attr,
 	&format_attr_thres.attr,
+	&format_attr_all.attr,
+	&format_attr_mesi.attr,
 	NULL,
 };
+
+static umode_t ia64_pmu_format_visible(struct kobject *kobj,
+				       struct attribute *attr, int i)
+{
+	/* .all and .mesi only exist on Montecito */
+	if ((attr == &format_attr_all.attr || attr == &format_attr_mesi.attr) &&
+	    !(ia64_pmu_model->event_mask & IA64_PMC_ALL))
+		return 0;
+	return attr->mode;
+}
 
 static const struct attribute_group ia64_pmu_format_group = {
 	.name		= "format",
 	.attrs		= ia64_pmu_format_attrs,
+	.is_visible	= ia64_pmu_format_visible,
 };
 
 static const struct attribute_group *ia64_pmu_attr_groups[] = {
