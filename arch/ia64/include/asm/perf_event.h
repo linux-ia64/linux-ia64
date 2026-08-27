@@ -31,4 +31,10 @@
 #define IA64_PMC0_FR		(1UL << 0)
 #define IA64_PMC0_OVFL_MASK	(~1UL)
 
+#ifdef CONFIG_PERF_EVENTS
+extern void ia64_pmu_init_percpu(void);
+#else
+static inline void ia64_pmu_init_percpu(void) { }
+#endif
+
 #endif /* _ASM_IA64_PERF_EVENT_H */

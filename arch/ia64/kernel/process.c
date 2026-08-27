@@ -263,6 +263,9 @@ ia64_save_extra (struct task_struct *task)
 {
 	if ((task->thread.flags & IA64_THREAD_DBG_VALID) != 0)
 		ia64_save_debug_regs(&task->thread.dbr[0]);
+
+	if (IA64_PMU_COUNTS_USER())
+		ia64_pmu_switch_task(task, 0);
 }
 
 void
@@ -270,6 +273,9 @@ ia64_load_extra (struct task_struct *task)
 {
 	if ((task->thread.flags & IA64_THREAD_DBG_VALID) != 0)
 		ia64_load_debug_regs(&task->thread.dbr[0]);
+
+	if (IA64_PMU_COUNTS_USER())
+		ia64_pmu_switch_task(task, 1);
 }
 
 /*

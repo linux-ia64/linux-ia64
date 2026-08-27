@@ -50,6 +50,7 @@
 #include <asm/irq.h>
 #include <asm/mca.h>
 #include <asm/page.h>
+#include <asm/perf_event.h>
 #include <asm/processor.h>
 #include <asm/ptrace.h>
 #include <asm/sal.h>
@@ -423,6 +424,8 @@ smp_callin (void)
 	smp_setup_percpu_timer();
 
 	ia64_mca_cmc_vector_setup();	/* Setup vector on AP */
+
+	ia64_pmu_init_percpu();
 
 	local_irq_enable();
 

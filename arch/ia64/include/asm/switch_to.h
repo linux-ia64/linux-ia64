@@ -31,8 +31,17 @@ extern struct task_struct *ia64_switch_to (void *next_task);
 extern void ia64_save_extra (struct task_struct *task);
 extern void ia64_load_extra (struct task_struct *task);
 
+#ifdef CONFIG_PERF_EVENTS
+  DECLARE_PER_CPU(unsigned int, ia64_pmu_pp_users);
+  extern void ia64_pmu_switch_task(struct task_struct *task, int sched_in);
+# define IA64_PMU_COUNTS_USER()	(__this_cpu_read(ia64_pmu_pp_users) != 0)
+#else
+# define IA64_PMU_COUNTS_USER()	(0)
+#endif
+
 #define IA64_HAS_EXTRA_STATE(t)							\
-	((t)->thread.flags & (IA64_THREAD_DBG_VALID|IA64_THREAD_PM_VALID))
+	((t)->thread.flags & (IA64_THREAD_DBG_VALID|IA64_THREAD_PM_VALID)	\
+	 || IA64_PMU_COUNTS_USER())
 
 #define __switch_to(prev,next,last) do {							 \
 	if (IA64_HAS_EXTRA_STATE(prev))								 \
