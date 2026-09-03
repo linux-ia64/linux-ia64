@@ -21,6 +21,7 @@
 
 #include <linux/module.h>
 #include <linux/acpi.h>
+#include <linux/platform_device.h>
 #include <asm/sal.h>
 
 MODULE_AUTHOR("Bjorn Helgaas <bjorn.helgaas@hp.com>");
@@ -176,7 +177,7 @@ static int aml_nfw_remove_global_handler(void)
 	return 0;
 }
 
-static int aml_nfw_add(struct acpi_device *device)
+static int aml_nfw_probe(struct platform_device *pdev)
 {
 	/*
 	 * We would normally allocate a new context structure and install
@@ -187,7 +188,7 @@ static int aml_nfw_add(struct acpi_device *device)
 	return aml_nfw_add_global_handler();
 }
 
-static void aml_nfw_remove(struct acpi_device *device)
+static void aml_nfw_remove(struct platform_device *pdev)
 {
 	aml_nfw_remove_global_handler();
 }
@@ -197,13 +198,13 @@ static const struct acpi_device_id aml_nfw_ids[] = {
 	{"", 0}
 };
 
-static struct acpi_driver acpi_aml_nfw_driver = {
-	.name = "native firmware",
-	.ids = aml_nfw_ids,
-	.ops = {
-		.add = aml_nfw_add,
-		.remove = aml_nfw_remove,
-		},
+static struct platform_driver acpi_aml_nfw_driver = {
+	.probe = aml_nfw_probe,
+	.remove = aml_nfw_remove,
+	.driver = {
+		.name = "native firmware",
+		.acpi_match_table = aml_nfw_ids,
+	},
 };
 
 static int __init aml_nfw_init(void)
@@ -213,7 +214,7 @@ static int __init aml_nfw_init(void)
 	if (force_register)
 		aml_nfw_add_global_handler();
 
-	result = acpi_bus_register_driver(&acpi_aml_nfw_driver);
+	result = platform_driver_register(&acpi_aml_nfw_driver);
 	if (result < 0) {
 		aml_nfw_remove_global_handler();
 		return result;
@@ -224,7 +225,7 @@ static int __init aml_nfw_init(void)
 
 static void __exit aml_nfw_exit(void)
 {
-	acpi_bus_unregister_driver(&acpi_aml_nfw_driver);
+	platform_driver_unregister(&acpi_aml_nfw_driver);
 	aml_nfw_remove_global_handler();
 }
 
