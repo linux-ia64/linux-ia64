@@ -151,6 +151,7 @@ struct task_struct init_task
 		.dsq_list.node	= LIST_HEAD_INIT(init_task.scx.dsq_list.node),
 		.sticky_cpu	= -1,
 		.holding_cpu	= -1,
+		.runnable_cpu	= -1,
 		.runnable_node	= LIST_HEAD_INIT(init_task.scx.runnable_node),
 		.runnable_at	= INITIAL_JIFFIES,
 		.ddsp_dsq_id	= SCX_DSQ_INVALID,
@@ -168,6 +169,7 @@ struct task_struct init_task
 	RCU_POINTER_INITIALIZER(cred, &init_cred),
 	.comm		= INIT_TASK_COMM,
 	.thread		= INIT_THREAD,
+	.real_fs	= &init_fs,
 	.fs		= &init_fs,
 	.files		= &init_files,
 #ifdef CONFIG_IO_URING
