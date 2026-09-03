@@ -352,6 +352,7 @@ static void write_src(void)
 	unsigned int i, k, off;
 	unsigned int best_idx[256];
 	unsigned int *markers, markers_cnt;
+	const char *addr_label;
 	char buf[KSYM_NAME_LEN];
 
 	printf("#include <asm/bitsperlong.h>\n");
@@ -445,10 +446,8 @@ static void write_src(void)
 		printf("\t.short\t%d\n", best_idx[i]);
 	printf("\n");
 
-	if (!base_relative)
-		output_label("kallsyms_addresses");
-	else
-		output_label("kallsyms_offsets");
+	addr_label = base_relative ? "kallsyms_offsets" : "kallsyms_addresses";
+	output_label(addr_label);
 
 	for (i = 0; i < table_cnt; i++) {
 		if (base_relative) {
@@ -473,7 +472,7 @@ static void write_src(void)
 			output_address(table[i]->addr);
 		}
 	}
-	printf(".size kallsyms_offsets, . - kallsyms_offsets\n");
+	printf(".size %s, . - %s\n", addr_label, addr_label);
 	printf("\n");
 
 	if (base_relative) {
