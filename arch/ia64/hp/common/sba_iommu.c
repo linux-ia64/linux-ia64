@@ -35,7 +35,6 @@
 #include <linux/iommu-helper.h>
 #include <linux/dma-map-ops.h>
 #include <linux/prefetch.h>
-#include <linux/swiotlb.h>
 
 #include <asm/delay.h>		/* ia64_get_itc() */
 #include <asm/io.h>
@@ -2077,9 +2076,21 @@ static const struct dma_map_ops sba_dma_ops = {
 	.free_pages		= dma_common_free_pages,
 };
 
+void pcibios_bus_add_device(struct pci_dev *pdev)
+{
+	if (!GET_IOC(&pdev->dev)) {
+		/* sba_iommu only translates for devices behind an ioc */
+		return;
+	}
+
+	set_dma_ops(&pdev->dev, &sba_dma_ops);
+}
+
 static int __init
 sba_init(void)
 {
+	struct pci_dev *pdev = NULL;
+
 	/*
 	 * If we are booting a kdump kernel, the sba_iommu will cause devices
 	 * that were not shutdown properly to MCA as soon as they are turned
@@ -2105,9 +2116,13 @@ sba_init(void)
 			sba_connect_bus(b);
 	}
 
-	/* no need for swiotlb with the iommu */
-	swiotlb_exit();
-	dma_ops = &sba_dma_ops;
+	/*
+	 * Buses enumerated before we ran had no IOC attached yet, so their
+	 * devices missed pcibios_bus_add_device().  Hand out ops now that
+	 * sba_connect_bus() has filled in PCI_CONTROLLER(bus)->iommu.
+	 */
+	for_each_pci_dev(pdev)
+		pcibios_bus_add_device(pdev);
 
 #ifdef CONFIG_PROC_FS
 	ioc_proc_init();
