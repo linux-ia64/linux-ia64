@@ -366,6 +366,62 @@ void flush_tlb_range(struct vm_area_struct *vma,
 }
 EXPORT_SYMBOL(flush_tlb_range);
 
+/*
+ * Purge a kernel virtual address range from the TLBs of all CPUs.
+ *
+ * Kernel mappings (region 5, vmalloc/ioremap space) are shared by all CPUs,
+ * so every CPU runs the same ranged ptc.l loop.
+ */
+struct kernel_tlb_purge {
+	unsigned long start;
+	unsigned long end;
+	unsigned long nbits;
+};
+
+static void local_flush_tlb_kernel_range(void *arg)
+{
+	struct kernel_tlb_purge *p = arg;
+	unsigned long addr = p->start, flags;
+
+	local_irq_save(flags);
+	do {
+		ia64_ptcl(addr, p->nbits << 2);
+		addr += 1UL << p->nbits;
+	} while (addr < p->end);
+	local_irq_restore(flags);
+	ia64_srlz_i();			/* srlz.i implies srlz.d */
+}
+
+/* Above this many ptc.l per CPU, purge everything instead. */
+#define KERNEL_TLB_PURGE_MAX_ITER	1024
+
+void flush_tlb_kernel_range(unsigned long start, unsigned long end)
+{
+	struct kernel_tlb_purge p;
+	unsigned long size = end - start, nbits;
+
+	if (unlikely(start >= end))
+		return;
+
+	nbits = ia64_fls(size + PAGE_SIZE - 1);
+	while (unlikely(((1UL << nbits) & purge.mask) == 0) &&
+			(nbits < purge.max_bits))
+		++nbits;
+	if (nbits > purge.max_bits)
+		nbits = purge.max_bits;
+	p.start = start & ~((1UL << nbits) - 1);
+	p.end = end;
+	p.nbits = nbits;
+
+	if (unlikely(REGION_NUMBER(start) != REGION_NUMBER(end - 1) ||
+		     ((p.end - p.start) >> nbits) > KERNEL_TLB_PURGE_MAX_ITER)) {
+		flush_tlb_all();
+		return;
+	}
+
+	on_each_cpu(local_flush_tlb_kernel_range, &p, 1);
+}
+
 void ia64_tlb_init(void)
 {
 	ia64_ptce_info_t ptce_info;
