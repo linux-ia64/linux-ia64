@@ -3381,17 +3381,25 @@ static void vm_reset_perms(struct vm_struct *area)
 	/*
 	 * Find the start and end range of the direct mappings to make sure that
 	 * the vm_unmap_aliases() flush includes the direct map.
+	 *
+	 * Only needed where set_direct_map_invalid_noflush() below actually
+	 * invalidates the direct map.  Without CONFIG_ARCH_HAS_SET_DIRECT_MAP
+	 * it is a no-op stub, so nothing there needs flushing and merging the
+	 * direct map addresses would only widen the range passed to
+	 * flush_tlb_kernel_range().
 	 */
-	for (i = 0; i < area->nr_pages; i += 1U << page_order) {
-		unsigned long addr = (unsigned long)page_address(area->pages[i]);
+	if (IS_ENABLED(CONFIG_ARCH_HAS_SET_DIRECT_MAP)) {
+		for (i = 0; i < area->nr_pages; i += 1U << page_order) {
+			unsigned long addr = (unsigned long)page_address(area->pages[i]);
 
-		if (addr) {
-			unsigned long page_size;
+			if (addr) {
+				unsigned long page_size;
 
-			page_size = PAGE_SIZE << page_order;
-			start = min(addr, start);
-			end = max(addr + page_size, end);
-			flush_dmap = 1;
+				page_size = PAGE_SIZE << page_order;
+				start = min(addr, start);
+				end = max(addr + page_size, end);
+				flush_dmap = 1;
+			}
 		}
 	}
 
