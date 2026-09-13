@@ -22,7 +22,6 @@
 #include <linux/initrd.h>
 #include <linux/security.h>
 #include <linux/kmemleak.h>
-#include <asm/fixmap.h>
 #include "internal.h"
 
 #ifdef CONFIG_ACPI_CUSTOM_DSDT
@@ -382,6 +381,7 @@ static void acpi_table_taint(struct acpi_table_header *table)
 }
 
 #ifdef CONFIG_ACPI_TABLE_UPGRADE
+#include <asm/fixmap.h>	/* for NR_FIX_BTMAPS */
 static u64 acpi_tables_addr;
 static int all_tables_size;
 
