@@ -253,7 +253,11 @@ ia64_global_tlb_purge (struct mm_struct *mm, unsigned long start,
 
 	toolatetochangeptcgsem = 1;
 
-	if (mm != active_mm) {
+	/*
+	 * A kernel thread borrowing mm as a lazy active_mm can still have the
+	 * region IDs of an old context of mm loaded, so reload those as well.
+	 */
+	if (mm != active_mm || !current->mm) {
 		/* Restore region IDs for mm */
 		if (mm && active_mm) {
 			activate_context(mm);
@@ -332,7 +336,8 @@ __flush_tlb_range (struct vm_area_struct *vma, unsigned long start,
 
 	preempt_disable();
 #ifdef CONFIG_SMP
-	if (mm != current->active_mm || cpumask_weight(mm_cpumask(mm)) != 1) {
+	if (mm != current->active_mm ||
+	    !cpumask_equal(mm_cpumask(mm), cpumask_of(smp_processor_id()))) {
 		ia64_global_tlb_purge(mm, start, end, nbits);
 		preempt_enable();
 		return;
