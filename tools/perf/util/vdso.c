@@ -7,6 +7,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <elf.h>
+#include <link.h>
 #include <linux/kernel.h>
 
 #include "vdso.h"
@@ -68,6 +70,62 @@ static struct vdso_info *vdso_info__new(void)
 	return memdup(&vdso_info_init, sizeof(vdso_info_init));
 }
 
+/*
+ * Size of the ELF image at the start of a [vdso] mapping, or 0 if there is
+ * no (valid) image there.
+ *
+ * The mapping can be larger than the image and need not be readable all the
+ * way through: on ia64 the "vdso" is the gate area, a 512KB VMA marked
+ * VM_READ whose second page is execute-only for user mode, so copying the
+ * whole mapping faults.  Only touch what the ELF headers say is there.
+ */
+static size_t vdso_image_size(const void *start, size_t maplen)
+{
+	const ElfW(Ehdr) *ehdr = start;
+	const ElfW(Phdr) *phdr;
+	size_t size, end;
+	int i;
+
+	if (maplen < sizeof(*ehdr) || memcmp(ehdr->e_ident, ELFMAG, SELFMAG) ||
+	    ehdr->e_ident[EI_CLASS] != (sizeof(long) == 8 ? ELFCLASS64 : ELFCLASS32) ||
+	    ehdr->e_phentsize != sizeof(*phdr))
+		return 0;
+
+	size = sizeof(*ehdr);
+
+	if (ehdr->e_phoff > maplen ||
+	    (size_t)ehdr->e_phnum * sizeof(*phdr) > maplen - ehdr->e_phoff)
+		return 0;
+	end = ehdr->e_phoff + (size_t)ehdr->e_phnum * sizeof(*phdr);
+	if (end > size)
+		size = end;
+
+	phdr = (const void *)((const char *)start + ehdr->e_phoff);
+	for (i = 0; i < ehdr->e_phnum; i++) {
+		if (phdr[i].p_type != PT_LOAD && phdr[i].p_type != PT_DYNAMIC &&
+		    phdr[i].p_type != PT_NOTE)
+			continue;
+		if (phdr[i].p_offset > maplen ||
+		    phdr[i].p_filesz > maplen - phdr[i].p_offset)
+			return 0;
+		end = phdr[i].p_offset + phdr[i].p_filesz;
+		if (end > size)
+			size = end;
+	}
+
+	if (ehdr->e_shnum) {
+		if (ehdr->e_shentsize != sizeof(ElfW(Shdr)) ||
+		    ehdr->e_shoff > maplen ||
+		    (size_t)ehdr->e_shnum * ehdr->e_shentsize > maplen - ehdr->e_shoff)
+			return 0;
+		end = ehdr->e_shoff + (size_t)ehdr->e_shnum * ehdr->e_shentsize;
+		if (end > size)
+			size = end;
+	}
+
+	return size;
+}
+
 static char *get_file(struct vdso_file *vdso_file)
 {
 	char *vdso = NULL;
@@ -82,7 +140,11 @@ static char *get_file(struct vdso_file *vdso_file)
 	if (vdso_file->error || find_map(&start, &end, VDSO__MAP_NAME))
 		return NULL;
 
-	size = end - start;
+	size = vdso_image_size(start, end - start);
+	if (!size) {
+		vdso_file->error = true;
+		return NULL;
+	}
 
 	buf = memdup(start, size);
 	if (!buf)
