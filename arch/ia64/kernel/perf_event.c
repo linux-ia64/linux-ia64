@@ -196,6 +196,16 @@ static int ia64_pmu_event_set_period(struct perf_event *event)
 		overflow = 1;
 	}
 
+	/*
+	 * A counter armed with a single event left never overflows: sampling
+	 * with a period of 1 delivers one interrupt and then stalls until the
+	 * counter is reloaded by something else.  The generic frequency
+	 * adjustment starts every "perf record -F" at a period of 1, so this
+	 * has to be handled here, like x86 and the other PMU drivers do.
+	 */
+	if (left < 2)
+		left = 2;
+
 	if (left > max_period)
 		left = max_period;
 
