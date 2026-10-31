@@ -59,6 +59,26 @@
 #define IA64_EVENT_COUNTERS(e)	((unsigned long)((e) >> 48))
 #define IA64_EVENT_CONFIG(e)	((e) & 0xffffffffUL)
 
+/*
+ * Layout of a PERF_TYPE_RAW config, which is also what the sysfs format
+ * attributes describe.  It follows the x86 convention, "rUUEE" being
+ * event EE with unit mask UU, so that a raw event spelled the usual way
+ * (perf stat -e r2, -e r102) counts what the Itanium manual calls event
+ * 0x02, and is independent of where the PMC keeps those fields:
+ *
+ *	event	config 7..0	-> PMC.es	(bits 15..8)
+ *	umask	config 11..8	-> PMC.umask	(bits 19..16)
+ *	thres	config 14..12	-> PMC.thres	(bits 22..20)
+ *	all	config 16	-> PMC.all	(bit 26, Montecito)
+ *	mesi	config 20..17	-> PMC.mesi	(bits 30..27, Montecito)
+ */
+#define IA64_RAW_EVENT_MASK	0xffUL
+#define IA64_RAW_UMASK_SHIFT	8
+#define IA64_RAW_THRES_SHIFT	12
+#define IA64_RAW_ALL		(1UL << 16)
+#define IA64_RAW_MESI_SHIFT	17
+#define IA64_RAW_CONFIG_MASK	0x1fffffUL
+
 #define C(x)			PERF_COUNT_HW_CACHE_##x
 
 struct ia64_pmu_model {
@@ -358,6 +378,18 @@ static int ia64_pmu_map_cache_event(u64 config, u64 *event)
 	return 0;
 }
 
+static u64 ia64_pmu_raw_to_pmc(u64 config)
+{
+	return ((config & IA64_RAW_EVENT_MASK) << IA64_PMC_ES_SHIFT) |
+	       (((config >> IA64_RAW_UMASK_SHIFT) & 0xf)
+					<< IA64_PMC_UMASK_SHIFT) |
+	       (((config >> IA64_RAW_THRES_SHIFT) & 0x7)
+					<< IA64_PMC_THRES_SHIFT) |
+	       ((config & IA64_RAW_ALL) ? IA64_PMC_ALL : 0) |
+	       (((config >> IA64_RAW_MESI_SHIFT) & 0xf)
+					<< IA64_PMC_MESI_SHIFT);
+}
+
 static int ia64_pmu_event_init(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
@@ -381,11 +413,14 @@ static int ia64_pmu_event_init(struct perf_event *event)
 		break;
 	case PERF_TYPE_RAW:
 		/*
-		 * The raw config is the value of the counter's PMC: the event
-		 * select sits in bits 15..8, the unit mask in 19..16, and so
-		 * on.  Everything the kernel drives itself is masked out.
+		 * See the layout above.  Refuse what this model cannot
+		 * express rather than silently counting something else.
 		 */
-		evt = event->attr.config & ia64_pmu_model->event_mask;
+		if (event->attr.config & ~IA64_RAW_CONFIG_MASK)
+			return -EINVAL;
+		evt = ia64_pmu_raw_to_pmc(event->attr.config);
+		if (evt & ~ia64_pmu_model->event_mask)
+			return -EINVAL;
 		evt |= (u64)ia64_pmu_counters << 48;
 		break;
 	default:
@@ -472,11 +507,11 @@ static irqreturn_t ia64_pmu_interrupt(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-PMU_FORMAT_ATTR(event,	"config:8-15");
-PMU_FORMAT_ATTR(umask,	"config:16-19");
-PMU_FORMAT_ATTR(thres,	"config:20-22");
-PMU_FORMAT_ATTR(all,	"config:26");
-PMU_FORMAT_ATTR(mesi,	"config:27-30");
+PMU_FORMAT_ATTR(event,	"config:0-7");
+PMU_FORMAT_ATTR(umask,	"config:8-11");
+PMU_FORMAT_ATTR(thres,	"config:12-14");
+PMU_FORMAT_ATTR(all,	"config:16");
+PMU_FORMAT_ATTR(mesi,	"config:17-20");
 
 static struct attribute *ia64_pmu_format_attrs[] = {
 	&format_attr_event.attr,

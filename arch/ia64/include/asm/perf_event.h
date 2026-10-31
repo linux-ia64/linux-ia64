@@ -5,7 +5,8 @@
  * The layout below is the architected one (Itanium SDM, vol 2, "Performance
  * Monitoring").  Bits 0..7 of a counter configuration register (PMC4 and up)
  * are architected and driven by the kernel; the event selection bits above
- * them are model specific and come from the raw perf_event config.
+ * them are model specific and are built from the raw perf_event config
+ * (see the layout in arch/ia64/kernel/perf_event.c).
  */
 #ifndef _ASM_IA64_PERF_EVENT_H
 #define _ASM_IA64_PERF_EVENT_H
