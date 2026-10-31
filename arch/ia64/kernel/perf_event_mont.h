@@ -5,9 +5,10 @@
  *
  * Twelve 47 bit counters in PMD4..PMD15.  PMC.ism has to be 2 (IA-64 only),
  * bit 26 selects whether a monitor counts for this thread only or for both
- * threads of the core, and bits 27..30 are the MESI qualifier that the cache
- * events are filtered by -- an L2D/L3 event with an empty MESI mask counts
- * nothing, so the canned events below ask for all four states.
+ * threads of the core, and bits 27..30 are the MESI qualifier used by the
+ * L2D and L3 events that support MESI filtering; for those events an empty
+ * qualifier counts nothing.  The canned cache events below set the qualifier
+ * to all four states.
  *
  * Event codes are in libpfm encoding: event select in bits 7..0, unit mask in
  * bits 19..16.

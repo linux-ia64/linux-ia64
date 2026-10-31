@@ -14,6 +14,7 @@ IA-64 Architecture
    fsys
    irq-redir
    mca
+   perf
    serial
 
    features
