@@ -81,6 +81,7 @@ static struct ia64_pmu_model ia64_pmu_mont = {
 	/* es[15:8], umask[19:16], thres[22:20], all[26], mesi[30:27] */
 	.event_mask	= 0x787fff00UL | IA64_PMC_ALL,
 	.pmc_fixed	= IA64_PMC_ISM_IA64,
+	.has_etb	= true,
 	.generic_events	= ia64_mont_generic_events,
 	.cache_events	= ia64_mont_cache_events,
 };

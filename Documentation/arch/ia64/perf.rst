@@ -12,11 +12,13 @@ IA-64 uses the generic perf_events interface.  Software events and tracepoints
 are available on every IA-64 processor.  Hardware events are provided by the
 IA-64 PMU driver when ``CONFIG_PERF_EVENTS`` is enabled.
 
-The driver uses the counting monitors, PMC/PMD4 and up.  The other facilities
-of the IA-64 PMU -- the event address registers, the branch trace buffer, the
-opcode match registers and address range checking -- do not map onto a perf
-counter and are not driven by the driver.  The old IA-64 specific perfmon
-interface that used them has been removed; see `Relationship to perfmon`_.
+The driver uses the counting monitors, PMC/PMD4 and up, and on Montecito the
+execution trace buffer for branch stack sampling (see `Branch stack
+sampling`_).  The other facilities of the IA-64 PMU -- the event address
+registers, the Itanium 2 branch trace buffer, the opcode match registers and
+address range checking -- do not map onto perf and are not driven by the
+driver.  The old IA-64 specific perfmon interface that used them has been
+removed; see `Relationship to perfmon`_.
 
 Supported PMUs
 ==============
@@ -166,14 +168,72 @@ perf asked for.
 The PMU has no NMI support; overflows are delivered as ordinary maskable
 interrupts.
 
+Branch stack sampling
+=====================
+
+On Montecito, a sampling event can carry a branch stack
+(``PERF_SAMPLE_BRANCH_STACK``, ``perf record -b`` or ``-j``).  The branches
+come from the execution trace buffer (ETB): PMC39 configures it, PMD48-PMD63
+hold a ring of sixteen branch source and target addresses, PMD38 indexes the
+ring and PMD39 holds additional bits for each entry.  The ETB can only be read
+while the PMU is frozen.  A counter overflow freezes it, so each sample
+reports the branches leading up to the overflow.
+
+A sample holds at most eight branches, usually fewer, the most recent first.
+The ETB is reset after every sample, on each context switch and when a branch
+stack event is scheduled in.  Samples therefore never overlap, and a sample
+never reports branches of another task.
+
+Only taken branches are recorded.  Besides branches, the ETB records ``rfi``,
+exceptions and failed ``chk`` instructions; these are reported as mispredicted
+branches.  Asynchronous interrupts are not recorded.  ``from`` is the bundle
+address plus slot number of the branch, following the IA-64 convention for
+instruction addresses.  ``to`` is the target bundle address.  ``mispred`` and
+``predicted`` are reported.  Cycle counts and branch types are not available.
+
+The ETB has a single branch type filter.  The following ``branch_sample_type``
+filters are accepted:
+
+===========================================  ==================================
+Filter                                       Recorded branches
+===========================================  ==================================
+``ANY`` (with or without other filters)      all taken branches
+``ANY_RETURN``                               returns
+``IND_CALL`` together with ``IND_JUMP``      indirect branches other than
+                                             returns; calls and jumps cannot
+                                             be told apart
+===========================================  ==================================
+
+Any other filter, or a combination of them, is rejected with ``EOPNOTSUPP``.
+The ``USER`` and ``KERNEL`` privilege filters are supported.  The ETB is
+enabled for the privilege levels requested both for branches and for the
+counter itself; if they do not overlap, the event is rejected with
+``EINVAL``.
+
+The ETB applies its privilege filter to the branch source only, and records
+the target of a captured branch whatever its privilege level.  An exception
+taken from user code therefore records the address of its kernel handler.
+When kernel branches are not being recorded, the driver drops every branch
+whose source or target is a kernel address (at or above ``TASK_SIZE``, which
+includes the gate page).  Unprivileged users can therefore record user-level
+branches without seeing kernel addresses.
+
+There is one ETB per hardware thread.  Branch stack events on the same CPU
+share it, so they must use the same filters.  Events with different filters
+are multiplexed.
+
+The ETB counts what it captures in event 0x11 (``BRANCH_EVENT``).  This event
+counts nothing unless a branch stack event is active on the CPU.
+
 Limitations
 ===========
 
-* Only the counting monitors are supported.  There is no support for event
-  address registers, the branch trace buffer, opcode matching, address range
-  checking or the IA-64 debug registers through perf.
+* There is no support for event address registers, the Itanium 2 branch trace
+  buffer, IP-EAR mode, opcode matching, address range checking or the IA-64
+  debug registers through perf.
 
-* Branch stack sampling is not supported, and ``exclude_idle`` is rejected.
+* Branch stacks are only available on Montecito.  Not-taken branches are not
+  recorded.  ``exclude_idle`` is rejected.
 
 * The Itanium 2 rule that events of the L2 cache group share the unit mask
   programmed into PMC4 is not enforced.  Two conflicting events from that

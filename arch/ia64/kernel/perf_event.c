@@ -7,10 +7,10 @@
  * descriptions of the individual Itanium implementations are kept in separate
  * headers, one per PMU model, the same way perfmon used to organise them.
  *
- * Only the counting monitors (PMC/PMD4 and up) are driven here.  The Itanium
- * PMUs have plenty more to offer -- event address registers, the branch trace
- * buffer, opcode matchers and address range checking -- none of which maps
- * onto a perf counter; those stay unused.
+ * The counting monitors (PMC/PMD4 and up) are driven here, and on Montecito
+ * the execution trace buffer provides branch stack samples.  The rest of what
+ * the Itanium PMUs offer -- event address registers, opcode matchers and
+ * address range checking -- does not map onto perf and stays unused.
  *
  * Copyright (C) 2026 Tomas Glozar
  *
@@ -81,6 +81,57 @@
 
 #define C(x)			PERF_COUNT_HW_CACHE_##x
 
+/*
+ * Montecito execution trace buffer (ETB): PMC39 selects what is captured,
+ * PMD48..63 is a ring of branch sources and targets, PMD38 indexes it and
+ * PMD39 carries four extension bits per entry.  PMC42 switches the same
+ * registers to IP-EAR mode, which is never used here and is kept at 0.
+ *
+ * The buffer is only readable while the PMU is frozen.  A counter overflow
+ * freezes it, so the overflow handler sees the branches that led up to the
+ * sample, the same way an x86 LBR is used.
+ */
+#define IA64_ETB_CONFIG_PMC	39
+#define IA64_ETB_MODE_PMC	42
+#define IA64_ETB_INDEX_PMD	38
+#define IA64_ETB_EXT_PMD	39
+#define IA64_ETB_FIRST_PMD	48
+#define IA64_ETB_ENTRIES	16
+
+/* PMC39 */
+#define IA64_ETB_TM_TAKEN	(2UL << 8)	/* taken branches only	     */
+#define IA64_ETB_PTM_ANY	(3UL << 10)	/* any target prediction     */
+#define IA64_ETB_PPM_ANY	(3UL << 12)	/* any path prediction	     */
+#define IA64_ETB_BRT_SHIFT	14
+#define IA64_ETB_BRT_ALL	0UL
+#define IA64_ETB_BRT_RETURN	2UL
+#define IA64_ETB_BRT_INDIRECT	3UL		/* non-return indirect	     */
+
+/* PMD48..63 */
+#define IA64_ETB_S		(1UL << 0)	/* source (else target)	     */
+#define IA64_ETB_MP		(1UL << 1)	/* mispredicted / valid target */
+#define IA64_ETB_SLOT_SHIFT	2
+#define IA64_ETB_SLOT_NOT_TAKEN	3
+#define IA64_ETB_ADDR_MASK	(~0xfUL)
+
+/* PMD38 */
+#define IA64_ETB_EBI_MASK	0xfUL
+#define IA64_ETB_FULL		(1UL << 5)
+
+/* PMD39, per entry */
+#define IA64_ETB_EXT_B1		(1UL << 0)	/* source is one bundle later */
+
+/*
+ * branch_sample_type bits that only modify what is reported.  Branch type,
+ * privilege level and cycles are not recorded by the ETB; the fields stay
+ * zero, which is what perf expects when it has no such information.
+ */
+#define IA64_ETB_SAMPLE_MODIFIERS	(PERF_SAMPLE_BRANCH_NO_FLAGS	|  \
+					 PERF_SAMPLE_BRANCH_NO_CYCLES	|  \
+					 PERF_SAMPLE_BRANCH_TYPE_SAVE	|  \
+					 PERF_SAMPLE_BRANCH_HW_INDEX	|  \
+					 PERF_SAMPLE_BRANCH_PRIV_SAVE)
+
 struct ia64_pmu_model {
 	const char	*name;
 	unsigned int	family;		/* CPUID[3].family, or ANY	     */
@@ -88,6 +139,7 @@ struct ia64_pmu_model {
 	unsigned int	counter_bits;	/* implemented width of a PMD	     */
 	u64		event_mask;	/* PMC bits the user may choose	     */
 	u64		pmc_fixed;	/* PMC bits the kernel always sets   */
+	bool		has_etb;	/* Montecito execution trace buffer  */
 	const u64	*generic_events;
 	const u64	(*cache_events)[PERF_COUNT_HW_CACHE_OP_MAX]
 				       [PERF_COUNT_HW_CACHE_RESULT_MAX];
@@ -117,6 +169,14 @@ struct cpu_hw_events {
 	unsigned long		used_mask;
 	unsigned int		n_active;
 	bool			enabled;
+
+	/* ETB: shared by every branch stack event on this CPU */
+	unsigned int		etb_users;
+	u64			etb_config;	/* PMC39 value while in use  */
+
+	/* decoded ETB, newest branch first; entries[] must follow */
+	struct perf_branch_stack	etb_stack;
+	struct perf_branch_entry	etb_entries[IA64_ETB_ENTRIES];
 };
 
 static DEFINE_PER_CPU(struct cpu_hw_events, cpu_hw_events);
@@ -169,6 +229,159 @@ static void ia64_pmu_write_counter(int idx, u64 val)
 {
 	ia64_set_pmd(idx, val & ia64_pmu_counter_mask);
 	ia64_srlz_d();
+}
+
+/*
+ * Forget what the ETB has recorded so far.  Done whenever a branch stack
+ * event is added, on every context switch while the ETB is in use and after
+ * each sample, so that a sample never reports branches of another task and
+ * no branch is reported twice.
+ */
+static void ia64_etb_reset(void)
+{
+	ia64_set_pmd(IA64_ETB_INDEX_PMD, 0);
+	ia64_srlz_d();
+}
+
+static int ia64_etb_add(struct cpu_hw_events *cpuc, struct perf_event *event)
+{
+	u64 config = event->hw.branch_reg.config;
+
+	/* one PMC39 per CPU: events with different filters cannot share it */
+	if (cpuc->etb_users && cpuc->etb_config != config)
+		return -EAGAIN;
+
+	if (!cpuc->etb_users++) {
+		cpuc->etb_config = config;
+		ia64_set_pmc(IA64_ETB_CONFIG_PMC, config);
+	}
+	ia64_etb_reset();
+
+	/* for ia64_pmu_sched_task() */
+	perf_sched_cb_inc(event->pmu);
+	return 0;
+}
+
+static void ia64_etb_del(struct cpu_hw_events *cpuc, struct perf_event *event)
+{
+	perf_sched_cb_dec(event->pmu);
+
+	if (WARN_ON_ONCE(!cpuc->etb_users))
+		return;
+
+	if (!--cpuc->etb_users) {
+		ia64_set_pmc(IA64_ETB_CONFIG_PMC, 0);
+		ia64_srlz_d();
+	}
+}
+
+static bool ia64_etb_kernel_ip(u64 ip)
+{
+	return ip >= TASK_SIZE;
+}
+
+static void ia64_etb_emit(struct cpu_hw_events *cpuc, unsigned int *nr,
+			  u64 from, u64 to, bool mispred, bool user_only)
+{
+	struct perf_branch_entry *br;
+
+	/*
+	 * PMC39.plm only filters the branch source; once a source has been
+	 * captured its target always is.  A user level exception thus leaves
+	 * the address of its kernel handler in the buffer.  Never hand a
+	 * kernel address to a monitor that may not see the kernel.
+	 */
+	if (user_only && (ia64_etb_kernel_ip(from) || ia64_etb_kernel_ip(to)))
+		return;
+
+	br = &cpuc->etb_entries[(*nr)++];
+	memset(br, 0, sizeof(*br));
+	br->from      = from;
+	br->to        = to;
+	br->mispred   = mispred;
+	br->predicted = !mispred;
+	br->priv      = ia64_etb_kernel_ip(from) ? PERF_BR_PRIV_KERNEL
+						 : PERF_BR_PRIV_USER;
+}
+
+/*
+ * Turn the frozen ETB into cpuc->etb_stack.
+ *
+ * Entries are walked oldest first.  A source entry (s=1) carries the bundle
+ * and slot of a taken branch; it is normally followed by a target entry (s=0,
+ * mp=1) holding the target bundle.  When the target bundle itself contains a
+ * captured branch, the hardware may record only that branch's source, so two
+ * sources in a row mean that the second one's bundle is the first one's
+ * target.  That is the bundle as recorded: the PMD39 b1 bit, which moves the
+ * second source one bundle further, says that the branch sits in the second
+ * bundle of the issue group starting at the target.  A target without a source (its source was overwritten) and a
+ * source without a target (the newest entry, or an excepting branch) are
+ * dropped.  Addresses follow the IA-64 IP convention of bundle + slot;
+ * branch targets are always bundle aligned.
+ */
+static void ia64_etb_read(struct cpu_hw_events *cpuc)
+{
+	bool user_only = !(cpuc->etb_config & IA64_PMC_PLM_KERN);
+	u64 index = ia64_get_pmd(IA64_ETB_INDEX_PMD);
+	u64 ext = ia64_get_pmd(IA64_ETB_EXT_PMD);
+	unsigned int first, count, i, nr = 0;
+	bool pending = false, mispred = false;
+	u64 from = 0;
+
+	if (index & IA64_ETB_FULL) {
+		first = index & IA64_ETB_EBI_MASK;	/* oldest entry */
+		count = IA64_ETB_ENTRIES;
+	} else {
+		first = 0;
+		count = index & IA64_ETB_EBI_MASK;
+	}
+
+	for (i = 0; i < count; i++) {
+		unsigned int r = (first + i) % IA64_ETB_ENTRIES;
+		u64 entry = ia64_get_pmd(IA64_ETB_FIRST_PMD + r);
+		u64 addr = entry & IA64_ETB_ADDR_MASK;
+
+		if (entry & IA64_ETB_S) {
+			unsigned int slot = (entry >> IA64_ETB_SLOT_SHIFT) & 3;
+			/* PMD39 nibbles: pmd48, pmd56, pmd49, pmd57, ... */
+			unsigned int nibble = r < 8 ? 2 * r : 2 * (r - 8) + 1;
+
+			/* the recorded bundle is the previous branch's target */
+			if (pending)
+				ia64_etb_emit(cpuc, &nr, from, addr, mispred,
+					      user_only);
+
+			if ((ext >> (4 * nibble)) & IA64_ETB_EXT_B1)
+				addr += 0x10;
+
+			/* not-taken branches are not captured (tm=10) */
+			pending = slot != IA64_ETB_SLOT_NOT_TAKEN;
+			from = addr + slot;
+			mispred = entry & IA64_ETB_MP;
+		} else if (entry & IA64_ETB_MP) {
+			if (pending)
+				ia64_etb_emit(cpuc, &nr, from, addr, mispred,
+					      user_only);
+			pending = false;
+		}
+		/* s=0, mp=0: invalid entry */
+	}
+
+	/* perf wants the most recent branch first */
+	for (i = 0; i < nr / 2; i++)
+		swap(cpuc->etb_entries[i], cpuc->etb_entries[nr - 1 - i]);
+
+	cpuc->etb_stack.nr = nr;
+	cpuc->etb_stack.hw_idx = -1ULL;
+}
+
+static void ia64_pmu_sched_task(struct perf_event_pmu_context *pmu_ctx,
+				struct task_struct *task, bool sched_in)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+
+	if (sched_in && cpuc->etb_users)
+		ia64_etb_reset();
 }
 
 /*
@@ -295,6 +508,13 @@ static int ia64_pmu_add(struct perf_event *event, int flags)
 	if (!avail)
 		return -EAGAIN;
 
+	if (has_branch_stack(event)) {
+		int ret = ia64_etb_add(cpuc, event);
+
+		if (ret)
+			return ret;
+	}
+
 	idx = __ffs(avail);
 
 	cpuc->used_mask |= 1UL << idx;
@@ -316,6 +536,9 @@ static void ia64_pmu_del(struct perf_event *event, int flags)
 	struct hw_perf_event *hwc = &event->hw;
 
 	ia64_pmu_stop(event, PERF_EF_UPDATE);
+
+	if (has_branch_stack(event))
+		ia64_etb_del(cpuc, event);
 
 	cpuc->events[hwc->idx] = NULL;
 	cpuc->used_mask &= ~(1UL << hwc->idx);
@@ -390,6 +613,51 @@ static u64 ia64_pmu_raw_to_pmc(u64 config)
 					<< IA64_PMC_MESI_SHIFT);
 }
 
+/*
+ * Build the PMC39 value for a branch stack event.  The ETB filters by branch
+ * type with a single field, so only the requests it can express exactly are
+ * accepted: any branch, returns, or indirect branches (calls and jumps alike;
+ * the ETB cannot tell them apart, so both have to be asked for).
+ */
+static int ia64_etb_event_init(struct perf_event *event, u64 counter_plm)
+{
+	u64 type = event->attr.branch_sample_type;
+	u64 filter = type & ~(PERF_SAMPLE_BRANCH_PLM_ALL |
+			      IA64_ETB_SAMPLE_MODIFIERS);
+	u64 plm = 0, brt;
+
+	if (!ia64_pmu_model->has_etb)
+		return -EOPNOTSUPP;
+
+	if (filter & PERF_SAMPLE_BRANCH_ANY)		/* subsumes the rest */
+		brt = IA64_ETB_BRT_ALL;
+	else if (filter == PERF_SAMPLE_BRANCH_ANY_RETURN)
+		brt = IA64_ETB_BRT_RETURN;
+	else if (filter == (PERF_SAMPLE_BRANCH_IND_CALL |
+			    PERF_SAMPLE_BRANCH_IND_JUMP))
+		brt = IA64_ETB_BRT_INDIRECT;
+	else
+		return -EOPNOTSUPP;
+
+	/*
+	 * The ETB is gated by psr.pp like the counters, and user level psr.pp
+	 * is only maintained for counters that count user level, so it cannot
+	 * record more than its counter does.
+	 */
+	if (type & PERF_SAMPLE_BRANCH_KERNEL)
+		plm |= IA64_PMC_PLM_KERN;
+	if (type & PERF_SAMPLE_BRANCH_USER)
+		plm |= IA64_PMC_PLM_USER;
+	plm &= counter_plm;
+	if (!plm)
+		return -EINVAL;
+
+	event->hw.branch_reg.config = plm | IA64_PMC_PM | IA64_ETB_TM_TAKEN |
+				      IA64_ETB_PTM_ANY | IA64_ETB_PPM_ANY |
+				      (brt << IA64_ETB_BRT_SHIFT);
+	return 0;
+}
+
 static int ia64_pmu_event_init(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
@@ -429,8 +697,6 @@ static int ia64_pmu_event_init(struct perf_event *event)
 
 	if (event->attr.exclude_idle)
 		return -EOPNOTSUPP;
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
 
 	if (!event->attr.exclude_kernel)
 		plm |= IA64_PMC_PLM_KERN;
@@ -438,6 +704,12 @@ static int ia64_pmu_event_init(struct perf_event *event)
 		plm |= IA64_PMC_PLM_USER;
 	if (!plm)
 		return -EINVAL;
+
+	if (has_branch_stack(event)) {
+		ret = ia64_etb_event_init(event, plm);
+		if (ret)
+			return ret;
+	}
 
 	counters = IA64_EVENT_COUNTERS(evt) & ia64_pmu_counters;
 	if (!counters)
@@ -472,6 +744,7 @@ static irqreturn_t ia64_pmu_interrupt(int irq, void *arg)
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 	struct pt_regs *regs = get_irq_regs();
 	struct perf_sample_data data;
+	bool etb_read = false;
 	unsigned long ovfl;
 	int idx;
 
@@ -494,9 +767,22 @@ static irqreturn_t ia64_pmu_interrupt(int irq, void *arg)
 
 		perf_sample_data_init(&data, 0, event->hw.last_period);
 
+		/* every branch stack event on this CPU shares the one ETB */
+		if (has_branch_stack(event)) {
+			if (!etb_read) {
+				ia64_etb_read(cpuc);
+				etb_read = true;
+			}
+			perf_sample_save_brstack(&data, event,
+						 &cpuc->etb_stack, NULL);
+		}
+
 		if (perf_event_overflow(event, &data, regs))
 			ia64_pmu_stop(event, 0);
 	}
+
+	if (etb_read)
+		ia64_etb_reset();
 
 	/* clears the overflow status bits as a side effect */
 	if (cpuc->enabled)
@@ -553,6 +839,7 @@ static struct pmu ia64_pmu = {
 	.start		= ia64_pmu_start,
 	.stop		= ia64_pmu_stop,
 	.read		= ia64_pmu_read,
+	.sched_task	= ia64_pmu_sched_task,
 	.capabilities	= PERF_PMU_CAP_NO_NMI,
 };
 
@@ -576,6 +863,13 @@ void perf_event_print_debug(void)
 	for_each_set_bit(idx, &ia64_pmu_counters, IA64_PMU_MAX_COUNTERS)
 		pr_info("CPU#%d: pmc%-2d: 0x%016lx pmd%-2d: 0x%016lx\n",
 			cpu, idx, ia64_get_pmc(idx), idx, ia64_get_pmd(idx));
+
+	if (ia64_pmu_model->has_etb)
+		pr_info("CPU#%d: pmc39: 0x%016lx pmc42: 0x%016lx pmd38: 0x%016lx etb_users: %u\n",
+			cpu, ia64_get_pmc(IA64_ETB_CONFIG_PMC),
+			ia64_get_pmc(IA64_ETB_MODE_PMC),
+			ia64_get_pmd(IA64_ETB_INDEX_PMD),
+			__this_cpu_read(cpu_hw_events.etb_users));
 
 	local_irq_restore(flags);
 }
@@ -607,6 +901,11 @@ void ia64_pmu_init_percpu(void)
 	for_each_set_bit(idx, &ia64_pmu_counters, IA64_PMU_MAX_COUNTERS) {
 		ia64_set_pmc(idx, ia64_pmu_model->pmc_fixed);
 		ia64_set_pmd(idx, 0);
+	}
+	if (ia64_pmu_model->has_etb) {
+		ia64_set_pmc(IA64_ETB_CONFIG_PMC, 0);
+		ia64_set_pmc(IA64_ETB_MODE_PMC, 0);	/* ETB, not IP-EAR */
+		ia64_set_pmd(IA64_ETB_INDEX_PMD, 0);
 	}
 	ia64_srlz_d();
 
