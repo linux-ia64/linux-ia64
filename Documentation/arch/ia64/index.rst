@@ -16,5 +16,6 @@ IA-64 Architecture
    mca
    perf
    serial
+   spec-defer
 
    features
