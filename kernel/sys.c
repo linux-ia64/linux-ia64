@@ -158,6 +158,12 @@
 #ifndef PPC_SET_DEXCR_ASPECT
 # define PPC_SET_DEXCR_ASPECT(a, b, c)	(-EINVAL)
 #endif
+#ifndef IA64_GET_SPEC_DEFER
+# define IA64_GET_SPEC_DEFER(a)		(-EINVAL)
+#endif
+#ifndef IA64_SET_SPEC_DEFER
+# define IA64_SET_SPEC_DEFER(a, b)	(-EINVAL)
+#endif
 
 /*
  * this is where the system-wide overflow UID and GID are defined, for
@@ -2823,6 +2829,16 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		if (arg4 || arg5)
 			return -EINVAL;
 		error = PPC_SET_DEXCR_ASPECT(me, arg2, arg3);
+		break;
+	case PR_IA64_GET_SPEC_DEFER:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		error = IA64_GET_SPEC_DEFER(me);
+		break;
+	case PR_IA64_SET_SPEC_DEFER:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
+		error = IA64_SET_SPEC_DEFER(me, arg2);
 		break;
 	case PR_SET_VMA:
 		error = prctl_set_vma(arg2, arg3, arg4, arg5);

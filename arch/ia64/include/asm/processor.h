@@ -49,6 +49,8 @@
 							   sync at ctx sw */
 #define IA64_THREAD_FPEMU_NOPRINT (__IA64_UL(1) << 6)	/* don't log any fpswa faults */
 #define IA64_THREAD_FPEMU_SIGFPE  (__IA64_UL(1) << 7)	/* send a SIGFPE for fpswa faults */
+#define IA64_THREAD_SPEC_DEFER_TLB (__IA64_UL(1) << 8)	/* run with dcr.dm set (defer
+							   speculative TLB misses) */
 
 #define IA64_THREAD_UAC_SHIFT	3
 #define IA64_THREAD_UAC_MASK	(IA64_THREAD_UAC_NOPRINT | IA64_THREAD_UAC_SIGBUS)
@@ -266,6 +268,11 @@ extern void print_cpu_info (struct cpuinfo_ia64 *);
 	put_user(((task)->thread.flags & IA64_THREAD_FPEMU_MASK) >> IA64_THREAD_FPEMU_SHIFT,	\
 		 (int __user *) (addr));							\
 })
+
+extern int ia64_get_spec_defer(struct task_struct *task);
+extern int ia64_set_spec_defer(struct task_struct *task, unsigned long ctl);
+#define IA64_GET_SPEC_DEFER(task)	ia64_get_spec_defer(task)
+#define IA64_SET_SPEC_DEFER(task,ctl)	ia64_set_spec_defer(task, ctl)
 
 struct thread_struct {
 	__u32 flags;			/* various thread flags (see IA64_THREAD_*) */

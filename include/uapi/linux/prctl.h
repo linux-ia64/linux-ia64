@@ -416,4 +416,13 @@ struct prctl_mm_map {
 # define PR_CFI_DISABLE		_BITUL(1)
 # define PR_CFI_LOCK		_BITUL(2)
 
+/*
+ * IA-64 control speculation: which faults of a speculative load (ld.s,
+ * lfetch) the processor defers to a NaT instead of raising, for this
+ * thread.  Inherited by fork() and kept across execve().
+ */
+#define PR_IA64_GET_SPEC_DEFER		82
+#define PR_IA64_SET_SPEC_DEFER		83
+# define PR_IA64_SPEC_DEFER_TLB		(1UL << 0) /* Data TLB misses (DCR.dm) */
+
 #endif /* _LINUX_PRCTL_H */

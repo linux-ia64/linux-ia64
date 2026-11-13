@@ -30,6 +30,7 @@ extern struct task_struct *ia64_switch_to (void *next_task);
 
 extern void ia64_save_extra (struct task_struct *task);
 extern void ia64_load_extra (struct task_struct *task);
+extern void ia64_load_spec_defer(struct task_struct *task);
 
 #ifdef CONFIG_PERF_EVENTS
   DECLARE_PER_CPU(unsigned int, ia64_pmu_pp_users);
@@ -48,6 +49,10 @@ extern void ia64_load_extra (struct task_struct *task);
 		ia64_save_extra(prev);								 \
 	if (IA64_HAS_EXTRA_STATE(next))								 \
 		ia64_load_extra(next);								 \
+	/* dcr.dm always follows the thread running on this CPU */				 \
+	if (unlikely(((prev)->thread.flags ^ (next)->thread.flags)				 \
+		     & IA64_THREAD_SPEC_DEFER_TLB))						 \
+		ia64_load_spec_defer(next);							 \
 	ia64_psr(task_pt_regs(next))->dfh = !ia64_is_local_fpu_owner(next);			 \
 	(last) = ia64_switch_to((next));							 \
 } while (0)

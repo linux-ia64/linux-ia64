@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/personality.h>
+#include <linux/prctl.h>
 #include <linux/reboot.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
@@ -276,6 +277,65 @@ ia64_load_extra (struct task_struct *task)
 
 	if (IA64_PMU_COUNTS_USER())
 		ia64_pmu_switch_task(task, 1);
+}
+
+/*
+ * Speculative TLB-miss deferral (PR_IA64_SET_SPEC_DEFER).
+ *
+ * cpu_init() leaves dcr.dm clear, so a speculative load (ld.s, lfetch) that
+ * misses the TLB and that the VHPT walker cannot resolve raises a Data TLB
+ * fault.  For an address with no mapping that means the whole page-fault
+ * path, which only sets psr.ed in bad_area so that the load is retried and
+ * gets its NaT.  A thread whose code speculates loads past the guards that
+ * keep them valid (a JIT hoisting loads over a loop exit) can ask for dcr.dm
+ * instead: the processor then defers those faults itself, after the walker
+ * gives up, at the cost of a NaT, and so a recovery, for valid pages the
+ * walker does not find.  The kernel's own speculative loads all have
+ * recovery code, so it does not care which setting it runs under.
+ *
+ * dcr is per CPU.  The invariant is that dcr.dm on a CPU matches
+ * IA64_THREAD_SPEC_DEFER_TLB of the task running on it: cpu_init() starts
+ * with dm clear under a task without the flag, __switch_to() rewrites dcr when
+ * the flag differs between prev and next, and the prctl updates dcr together
+ * with the flag with interrupts off.
+ */
+void
+ia64_load_spec_defer (struct task_struct *task)
+{
+	unsigned long dcr = ia64_getreg(_IA64_REG_CR_DCR);
+
+	if (task->thread.flags & IA64_THREAD_SPEC_DEFER_TLB)
+		dcr |= IA64_DCR_DM;
+	else
+		dcr &= ~IA64_DCR_DM;
+	ia64_setreg(_IA64_REG_CR_DCR, dcr);
+	ia64_srlz_d();
+}
+
+int
+ia64_get_spec_defer (struct task_struct *task)
+{
+	return (task->thread.flags & IA64_THREAD_SPEC_DEFER_TLB) ?
+		PR_IA64_SPEC_DEFER_TLB : 0;
+}
+
+int
+ia64_set_spec_defer (struct task_struct *task, unsigned long ctl)
+{
+	unsigned long flags;
+
+	if (ctl & ~PR_IA64_SPEC_DEFER_TLB)
+		return -EINVAL;
+
+	/* task == current; keep the CPU and its dcr until both agree again */
+	local_irq_save(flags);
+	if (ctl & PR_IA64_SPEC_DEFER_TLB)
+		task->thread.flags |= IA64_THREAD_SPEC_DEFER_TLB;
+	else
+		task->thread.flags &= ~IA64_THREAD_SPEC_DEFER_TLB;
+	ia64_load_spec_defer(task);
+	local_irq_restore(flags);
+	return 0;
 }
 
 /*
