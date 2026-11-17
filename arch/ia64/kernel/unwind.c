@@ -1903,6 +1903,16 @@ find_save_locs (struct unw_frame_info *info)
 	struct unw_script *scr;
 	unsigned long flags = 0;
 
+	/*
+	 * Nested unwind: this CPU already holds unw.lock in build_script() (a
+	 * kmalloc there can fire a tracepoint whose stacktrace unwinds again).
+	 * Taking unw.lock again would deadlock on this CPU, so fail the step.
+	 */
+	if (unw_lock_held_this_cpu()) {
+		info->rp_loc = NULL;
+		return -1;
+	}
+
 	if ((info->ip & (local_cpu_data->unimpl_va_mask | 0xf)) || info->ip < TASK_SIZE) {
 		/* don't let obviously bad addresses pollute the cache */
 		/* FIXME: should really be level 0 but it occurs too often. KAO */
