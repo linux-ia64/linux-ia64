@@ -38,6 +38,20 @@
 #define IA64_BUNDLE_MASK	(~0xfULL)
 
 /*
+ * The call instruction behind a return address (a frame IP, slot-exact).  If
+ * the return slot is 1 or 2, the call is in the same bundle, one slot earlier.
+ * If it is slot 0, the call is slot 2 of the previous bundle.
+ */
+static u64 ia64_call_slot_ip(u64 ip)
+{
+	u64 ri = ip & 0x3;
+
+	if (ri)
+		return (ip & IA64_BUNDLE_MASK) | (ri - 1);
+	return ((ip & IA64_BUNDLE_MASK) - 0x10) | 2;
+}
+
+/*
  * Register-stack address arithmetic (the kernel's rse.h, reimplemented here
  * on purpose).  Skips num_regs stacked registers from addr, stepping over the
  * RSE NaT collection slot (every 64th slot, slot 0x3f).
@@ -123,62 +137,131 @@ void __libunwind_arch__finish_access_ia64(struct maps *maps __maybe_unused)
  * found from the PT_LOAD that the map covers (same approach as the generic
  * eh_frame code).
  */
-static int read_ia64_unwind_info(struct dso *dso, struct machine *machine,
-				 struct map *map, struct ia64_unw_info *info)
-{
-	u64 map_pgoff = map__pgoff(map);
-	u64 psz = (u64)getpagesize();
-	u64 text_vaddr = 0, unw_vaddr = 0, unw_memsz = 0, bias = 0;
-	bool have_text = false, have_unw = false, have_bias = false;
-	Elf *elf;
-	GElf_Phdr phdr;
-	size_t i, phdrnum = 0;
-	int fd, ret = -EINVAL;
+/*
+ * ELF layout of a DSO that the unwinder needs: the executable text segment,
+ * the PT_IA_64_UNWIND table, and the PT_LOAD segments (for the map bias).
+ * Read once per DSO and cached, since every unwound frame needs it.
+ */
+#define IA64_ELF_CACHE_SIZE	64
+#define IA64_ELF_MAX_LOADS	32
 
+struct ia64_elf_info {
+	char *name;
+	bool valid;
+	u64 text_vaddr, text_len;
+	u64 unw_vaddr, unw_memsz;
+	unsigned int nloads;
+	u64 load_off[IA64_ELF_MAX_LOADS];
+	u64 load_vaddr[IA64_ELF_MAX_LOADS];
+};
+
+static struct ia64_elf_info ia64_elf_cache[IA64_ELF_CACHE_SIZE];
+static unsigned int ia64_elf_cache_used;
+
+static struct ia64_elf_info *ia64_elf_cache_find(const char *name)
+{
+	unsigned int i;
+
+	for (i = 0; i < ia64_elf_cache_used; i++) {
+		if (!strcmp(ia64_elf_cache[i].name, name))
+			return &ia64_elf_cache[i];
+	}
+	return NULL;
+}
+
+/* Parse the DSO's ELF file.  Returns the cache entry, or NULL if it can't. */
+static struct ia64_elf_info *ia64_elf_read(struct dso *dso, struct machine *machine,
+					   const char *name)
+{
+	struct ia64_elf_info *ei;
+	GElf_Phdr phdr;
+	Elf *elf;
+	size_t i, phdrnum = 0;
+	int fd;
+
+	if (ia64_elf_cache_used >= IA64_ELF_CACHE_SIZE)
+		return NULL;
 	if (!dso__data_get_fd(dso, machine, &fd))
-		return -EINVAL;
+		return NULL;
 
 	elf = elf_begin(fd, PERF_ELF_C_READ_MMAP, NULL);
-	if (!elf)
-		goto out_put;
+	if (!elf) {
+		dso__data_put_fd(dso);
+		return NULL;
+	}
 
+	ei = &ia64_elf_cache[ia64_elf_cache_used];
+	memset(ei, 0, sizeof(*ei));
+	ei->name = strdup(name);
 	(void)elf_getphdrnum(elf, &phdrnum);
 	for (i = 0; i < phdrnum; i++) {
 		if (!gelf_getphdr(elf, i, &phdr))
 			continue;
-		if (phdr.p_type == PT_LOAD && (phdr.p_flags & PF_X) && !have_text) {
-			text_vaddr = phdr.p_vaddr;
-			info->text_len = phdr.p_memsz;
-			have_text = true;
+		if (phdr.p_type == PT_LOAD && (phdr.p_flags & PF_X) && !ei->text_len) {
+			ei->text_vaddr = phdr.p_vaddr;
+			ei->text_len = phdr.p_memsz;
 		}
 		if (phdr.p_type == PT_IA_64_UNWIND) {
-			unw_vaddr = phdr.p_vaddr;
-			unw_memsz = phdr.p_memsz;
-			have_unw = true;
+			ei->unw_vaddr = phdr.p_vaddr;
+			ei->unw_memsz = phdr.p_memsz;
+		}
+		if (phdr.p_type == PT_LOAD && ei->nloads < IA64_ELF_MAX_LOADS) {
+			ei->load_off[ei->nloads] = phdr.p_offset;
+			ei->load_vaddr[ei->nloads] = phdr.p_vaddr;
+			ei->nloads++;
 		}
 	}
+	elf_end(elf);
+	dso__data_put_fd(dso);
 
-	/* The map that starts the bias: the PT_LOAD at this map's file offset. */
-	for (i = 0; i < phdrnum && !have_bias; i++) {
-		if (!gelf_getphdr(elf, i, &phdr))
-			continue;
-		if (phdr.p_type == PT_LOAD &&
-		    (phdr.p_offset & ~(psz - 1)) == map_pgoff) {
-			bias = map__start(map) - (phdr.p_vaddr & ~(psz - 1));
+	ei->valid = ei->text_len && ei->unw_memsz;
+	if (!ei->valid) {
+		free(ei->name);
+		ei->name = NULL;
+		return NULL;
+	}
+	ia64_elf_cache_used++;
+	return ei;
+}
+
+/*
+ * Unwind layout of the DSO in the process address space.  The load bias comes
+ * from the PT_LOAD that the map covers (the one at this map's file offset).
+ */
+static int read_ia64_unwind_info(struct dso *dso, struct machine *machine,
+				 struct map *map, struct ia64_unw_info *info)
+{
+	const char *name = dso__long_name(dso);
+	u64 map_pgoff = map__pgoff(map);
+	u64 psz = (u64)getpagesize();
+	struct ia64_elf_info *ei;
+	unsigned int i;
+	u64 bias = 0;
+	bool have_bias = false;
+
+	if (!name)
+		return -EINVAL;
+
+	ei = ia64_elf_cache_find(name);
+	if (!ei)
+		ei = ia64_elf_read(dso, machine, name);
+	if (!ei)
+		return -EINVAL;
+
+	for (i = 0; i < ei->nloads && !have_bias; i++) {
+		if ((ei->load_off[i] & ~(psz - 1)) == map_pgoff) {
+			bias = map__start(map) - (ei->load_vaddr[i] & ~(psz - 1));
 			have_bias = true;
 		}
 	}
+	if (!have_bias)
+		return -EINVAL;
 
-	elf_end(elf);
-	if (have_text && have_unw && have_bias) {
-		info->segbase = bias + text_vaddr;
-		info->table_addr = bias + unw_vaddr;
-		info->table_len = unw_memsz / sizeof(unw_word_t);
-		ret = 0;
-	}
-out_put:
-	dso__data_put_fd(dso);
-	return ret;
+	info->segbase = bias + ei->text_vaddr;
+	info->text_len = ei->text_len;
+	info->table_addr = bias + ei->unw_vaddr;
+	info->table_len = ei->unw_memsz / sizeof(unw_word_t);
+	return 0;
 }
 
 static int find_proc_info(unw_addr_space_t as, unw_word_t ip, unw_proc_info_t *pi,
@@ -442,6 +525,33 @@ struct unwind_info *__libunwind_arch_unwind_info__new_ia64(struct thread *thread
 	ui->ui.e_machine = EM_IA_64;
 	ui->ui.best_effort = best_effort;
 
+	/*
+	 * Kernel-mode sample inside an fsys fast syscall: its IP is in kernel
+	 * text, which libunwind has no info for, and stepping from the b6
+	 * return address fails.  Workaround: take the two user frames from the
+	 * registers directly, b6 (the fsys return address) and then b0 (its
+	 * caller), and stop.  The chain is then fsys -> b6 frame -> b0 frame.
+	 * Frames above b0 are not recovered.
+	 */
+	if (first_ip >= IA64_KERNEL_START) {
+		static const int fsys_regs[] = { PERF_REG_IA64_B6, PERF_REG_IA64_B0 };
+		unsigned int i;
+
+		for (i = 0; i < ARRAY_SIZE(fsys_regs); i++) {
+			u64 val;
+
+			if (ui->ui.cur_ip >= max_stack)
+				break;
+			if (perf_reg_value(&val, perf_sample__user_regs(sample), fsys_regs[i]) ||
+			    !val)
+				continue;
+			ui->ui.ips[ui->ui.cur_ip++] = ia64_call_slot_ip(val);
+		}
+		/* Already complete: the step function returns 0 at once. */
+		ui->ui.max_ips = ui->ui.cur_ip;
+		return &ui->ui;
+	}
+
 	ret = unw_init_remote(&ui->_cursor, addr_space, &ui->ui);
 	if (ret) {
 		if (!best_effort)
@@ -477,14 +587,8 @@ int __libunwind_arch__unwind_step_ia64(struct unwind_info *ui __maybe_unused)
 		 * in the same bundle, one slot earlier.  If it is slot 0, the call
 		 * is slot 2 of the previous bundle.  A signal frame's IP is exact.
 		 */
-		if (unw_is_signal_frame(ui->cursor) <= 0) {
-			unsigned long ri = ip & 0x3;
-
-			if (ri)
-				ip = (ip & IA64_BUNDLE_MASK) | (ri - 1);
-			else
-				ip = ((ip & IA64_BUNDLE_MASK) - 0x10) | 2;
-		}
+		if (unw_is_signal_frame(ui->cursor) <= 0)
+			ip = ia64_call_slot_ip(ip);
 		ui->ips[ui->cur_ip++] = ip;
 	}
 	return ret;
