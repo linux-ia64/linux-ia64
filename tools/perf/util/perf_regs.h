@@ -2,6 +2,7 @@
 #ifndef __PERF_REGS_H
 #define __PERF_REGS_H
 
+#include <elf.h>
 #include <linux/types.h>
 #include <linux/compiler.h>
 
@@ -42,6 +43,12 @@ const char *__perf_reg_name_loongarch(int id);
 uint64_t __perf_reg_ip_loongarch(void);
 uint64_t __perf_reg_sp_loongarch(void);
 
+uint64_t __perf_reg_mask_ia64(bool intr);
+const char *__perf_reg_name_ia64(int id);
+uint64_t __perf_reg_ip_ia64(void);
+uint64_t __perf_reg_sp_ia64(void);
+uint64_t __perf_reg_minimal_ia64(void);
+
 uint64_t __perf_reg_mask_mips(bool intr);
 const char *__perf_reg_name_mips(int id);
 uint64_t __perf_reg_ip_mips(void);
@@ -73,6 +80,8 @@ uint64_t __perf_reg_sp_x86(void);
 
 static inline uint64_t DWARF_MINIMAL_REGS(uint16_t e_machine)
 {
+	if (e_machine == EM_IA_64)
+		return __perf_reg_minimal_ia64();
 	return (1ULL << perf_arch_reg_ip(e_machine)) | (1ULL << perf_arch_reg_sp(e_machine));
 }
 

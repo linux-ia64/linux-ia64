@@ -55,6 +55,9 @@ uint64_t perf_intr_reg_mask(uint16_t e_machine)
 	case EM_LOONGARCH:
 		mask = __perf_reg_mask_loongarch(/*intr=*/true);
 		break;
+	case EM_IA_64:
+		mask = __perf_reg_mask_ia64(/*intr=*/true);
+		break;
 	case EM_MIPS:
 		mask = __perf_reg_mask_mips(/*intr=*/true);
 		break;
@@ -98,6 +101,9 @@ uint64_t perf_user_reg_mask(uint16_t e_machine)
 	case EM_LOONGARCH:
 		mask = __perf_reg_mask_loongarch(/*intr=*/false);
 		break;
+	case EM_IA_64:
+		mask = __perf_reg_mask_ia64(/*intr=*/false);
+		break;
 	case EM_MIPS:
 		mask = __perf_reg_mask_mips(/*intr=*/false);
 		break;
@@ -140,6 +146,9 @@ const char *perf_reg_name(int id, uint16_t e_machine, uint32_t e_flags)
 		break;
 	case EM_LOONGARCH:
 		reg_name = __perf_reg_name_loongarch(id);
+		break;
+	case EM_IA_64:
+		reg_name = __perf_reg_name_ia64(id);
 		break;
 	case EM_MIPS:
 		reg_name = __perf_reg_name_mips(id);
@@ -206,6 +215,8 @@ uint64_t perf_arch_reg_ip(uint16_t e_machine)
 		return __perf_reg_ip_csky();
 	case EM_LOONGARCH:
 		return __perf_reg_ip_loongarch();
+	case EM_IA_64:
+		return __perf_reg_ip_ia64();
 	case EM_MIPS:
 		return __perf_reg_ip_mips();
 	case EM_PPC:
@@ -235,6 +246,8 @@ uint64_t perf_arch_reg_sp(uint16_t e_machine)
 		return __perf_reg_sp_csky();
 	case EM_LOONGARCH:
 		return __perf_reg_sp_loongarch();
+	case EM_IA_64:
+		return __perf_reg_sp_ia64();
 	case EM_MIPS:
 		return __perf_reg_sp_mips();
 	case EM_PPC:

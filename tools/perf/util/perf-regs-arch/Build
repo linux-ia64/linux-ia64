@@ -2,6 +2,7 @@ perf-util-y += perf_regs_aarch64.o
 perf-util-y += perf_regs_arm.o
 perf-util-y += perf_regs_csky.o
 perf-util-y += perf_regs_loongarch.o
+perf-util-y += perf_regs_ia64.o
 perf-util-y += perf_regs_mips.o
 perf-util-y += perf_regs_powerpc.o
 perf-util-y += perf_regs_riscv.o
