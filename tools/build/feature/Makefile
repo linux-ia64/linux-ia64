@@ -40,6 +40,7 @@ FILES=                                          \
          test-libtracefs.bin                    \
          test-libunwind.bin                     \
          test-libunwind-debug-frame.bin         \
+         test-libunwind-ia64.bin                \
          $(foreach arch,$(LIBUNWIND_ARCHS),test-libunwind-$(arch).bin test-libunwind-debug-frame-$(arch).bin) \
          test-pthread-attr-setaffinity-np.bin   \
          test-pthread-barrier.bin		\
@@ -211,6 +212,9 @@ $(OUTPUT)test-libunwind.bin:
 
 $(OUTPUT)test-libunwind-debug-frame.bin:
 	$(BUILD) -include libunwind.h -lelf -llzma -lunwind
+
+$(OUTPUT)test-libunwind-ia64.bin:
+	$(BUILD) -include libunwind-ia64.h -lelf -llzma -lz -l:libunwind-ia64.a
 
 define LIBUNWIND_RULE
 $$(OUTPUT)test-libunwind-$(1).bin:
