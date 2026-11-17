@@ -4340,6 +4340,14 @@ int cmd_record(int argc, const char **argv)
 	if (callchain_param.enabled && callchain_param.record_mode == CALLCHAIN_FP) {
 		if (EM_HOST == EM_AARCH64)
 			add_leaf_frame_caller_opts_aarch64(&rec->opts);
+		/*
+		 * ia64 has no frame-pointer user chains. Kernel chains are
+		 * recorded, but user chains come back empty until
+		 * --call-graph dwarf is supported there.
+		 */
+		if (EM_HOST == EM_IA_64)
+			pr_warning("ia64: -g (fp) records kernel call chains only; "
+				   "user call chains need --call-graph dwarf, which is not yet supported on ia64.\n");
 	}
 
 	err = -ENOMEM;
