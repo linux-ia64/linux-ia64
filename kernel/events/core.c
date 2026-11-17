@@ -7950,8 +7950,6 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 		u64 size = 0;
 		perf_output_put(handle, size);
 	} else {
-		unsigned long sp;
-		unsigned int rem;
 		u64 dyn_size;
 
 		/*
@@ -7968,12 +7966,13 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 		/* Static size. */
 		perf_output_put(handle, dump_size);
 
-		/* Data. */
-		sp = perf_user_stack_pointer(regs);
-		rem = __output_copy_user(handle, (void *) sp, dump_size);
-		dyn_size = dump_size - rem;
+		/*
+		 * Data.  The arch hook returns the bytes it actually wrote;
+		 * the rest of the static size is skipped.
+		 */
+		dyn_size = perf_arch_output_ustack(handle, regs, dump_size);
 
-		perf_output_skip(handle, rem);
+		perf_output_skip(handle, dump_size - dyn_size);
 
 		/* Dynamic size. */
 		perf_output_put(handle, dyn_size);

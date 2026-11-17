@@ -246,4 +246,24 @@ static inline bool arch_perf_have_user_stack_dump(void)
 #define perf_user_stack_pointer(regs) 0
 #endif /* CONFIG_HAVE_PERF_USER_STACK_DUMP */
 
+/*
+ * User stack dump for PERF_SAMPLE_STACK_USER.  The default dumps the memory
+ * stack from the user stack pointer.  An arch that needs more than that (for
+ * example a second stack, such as the ia64 register backing store) defines
+ * perf_arch_output_ustack() in its asm/perf_event.h.
+ *
+ * Returns the number of bytes actually written, not the number not copied, so
+ * the caller can skip the rest of the static size.
+ */
+#ifndef perf_arch_output_ustack
+static inline u64
+perf_arch_output_ustack(struct perf_output_handle *handle,
+			struct pt_regs *regs, u64 dump_size)
+{
+	return dump_size - __output_copy_user(handle,
+					      (void *)perf_user_stack_pointer(regs),
+					      dump_size);
+}
+#endif
+
 #endif /* _KERNEL_EVENTS_INTERNAL_H */
