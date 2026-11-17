@@ -38,4 +38,16 @@ extern void ia64_pmu_init_percpu(void);
 static inline void ia64_pmu_init_percpu(void) { }
 #endif
 
+/*
+ * Fake pt_regs for software events and tracepoints, which have no interrupt
+ * frame.  Only cr_iip and cr_ipsr are ever read from them: instruction_pointer(),
+ * user_mode() and the callchain match.  cr_ipsr = 0 means cpl 0 (not user) and
+ * ri 0.  The per-CPU buffer is not zeroed between uses, so no other field may
+ * be relied on.
+ */
+#define perf_arch_fetch_caller_regs(regs, __ip) do {		\
+	(regs)->cr_iip  = (__ip) & ~0xfUL;			\
+	(regs)->cr_ipsr = 0;					\
+} while (0)
+
 #endif /* _ASM_IA64_PERF_EVENT_H */
