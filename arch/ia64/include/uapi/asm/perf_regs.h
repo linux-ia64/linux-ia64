@@ -2,6 +2,8 @@
 #ifndef _UAPI_ASM_IA64_PERF_REGS_H
 #define _UAPI_ASM_IA64_PERF_REGS_H
 
+#include <linux/types.h>
+
 /*
  * Register numbers for perf's sample_regs_user / sample_regs_intr.
  *
@@ -71,6 +73,28 @@ enum perf_event_ia64_regs {
 	PERF_REG_IA64_FPSR,
 	PERF_REG_IA64_CCV,
 	PERF_REG_IA64_MAX,
+};
+
+/*
+ * User stack dump for PERF_SAMPLE_STACK_USER on ia64 (see perf_regs.c for the
+ * algorithm).  The dump is self-describing:
+ *
+ *	struct perf_ia64_ustack_hdr	(hdr.rbs_len bytes of RBS image)
+ *	rbs image			covers [rbs_addr, rbs_addr + rbs_len)
+ *	memory stack			covers [mem_addr, mem_addr + mem_len)
+ *
+ * The RBS image is the user register backing store as it was at the sample,
+ * with the NaT collection slots zeroed.  The memory stack starts at r12.
+ * Consumers check magic and the lengths before indexing.
+ */
+#define PERF_IA64_USTACK_MAGIC	0x494136345553544bULL	/* "IA64USTK", big-endian */
+
+struct perf_ia64_ustack_hdr {
+	__u64	magic;		/* PERF_IA64_USTACK_MAGIC */
+	__u64	rbs_addr;	/* user VA of the first RBS byte in the dump */
+	__u64	rbs_len;	/* bytes of RBS image, a multiple of 8 */
+	__u64	mem_addr;	/* user VA of the first memory-stack byte (r12) */
+	__u64	mem_len;	/* bytes of memory stack in the dump */
 };
 
 #endif /* _UAPI_ASM_IA64_PERF_REGS_H */

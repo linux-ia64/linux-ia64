@@ -32,6 +32,21 @@
 #define IA64_PMC0_FR		(1UL << 0)
 #define IA64_PMC0_OVFL_MASK	(~1UL)
 
+#include <linux/types.h>
+
+struct perf_output_handle;
+struct pt_regs;
+
+/*
+ * User stack dump: dump the register backing store with the memory stack
+ * (perf_regs.c).  Replaces the generic memory-stack-only default in
+ * kernel/events/internal.h.
+ */
+extern u64 ia64_perf_output_ustack(struct perf_output_handle *handle,
+				   struct pt_regs *regs, u64 dump_size);
+#define perf_arch_output_ustack(handle, regs, dump_size)	\
+	ia64_perf_output_ustack(handle, regs, dump_size)
+
 #ifdef CONFIG_PERF_EVENTS
 extern void ia64_pmu_init_percpu(void);
 #else
