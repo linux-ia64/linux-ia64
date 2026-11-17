@@ -18,7 +18,7 @@ obj-y := head.o entry.o efi.o efi_stub.o gate-data.o fsys.o irq.o irq_ia64.o	\
 obj-$(CONFIG_IA64_BRL_EMU)	+= brl_emu.o
 
 obj-$(CONFIG_IA64_PALINFO)	+= palinfo.o
-obj-$(CONFIG_PERF_EVENTS)	+= perf_event.o perf_callchain.o
+obj-$(CONFIG_PERF_EVENTS)	+= perf_event.o perf_callchain.o perf_regs.o
 obj-$(CONFIG_MODULES)		+= module.o
 obj-$(CONFIG_SMP)		+= smp.o smpboot.o
 obj-$(CONFIG_NUMA)		+= numa.o
