@@ -552,6 +552,21 @@ int __libunwind__access_reg(void *as __maybe_unused, int regnum, void *valp_word
 	return 0;
 }
 
+/*
+ * Helpers for the per-arch backends that need the generic map and DSO
+ * lookup (libunwind-ia64.c reads the DSO's unwind table itself).
+ */
+struct map *__libunwind__find_map(uint64_t ip, struct unwind_info *ui)
+{
+	return find_map(ip, ui);
+}
+
+int __libunwind__access_dso_mem(struct unwind_info *ui, uint64_t addr,
+				void *data_word)
+{
+	return access_dso_mem(ui, addr, data_word);
+}
+
 int unwind__prepare_access(struct maps *maps, uint16_t e_machine)
 {
 	void *addr_space;

@@ -12,6 +12,8 @@ int get_perf_regnum_for_unw_regnum(unsigned int e_machine, int unw_regnum)
 		return __get_perf_regnum_for_unw_regnum_arm(unw_regnum);
 	case EM_AARCH64:
 		return __get_perf_regnum_for_unw_regnum_arm64(unw_regnum);
+	case EM_IA_64:
+		return __get_perf_regnum_for_unw_regnum_ia64(unw_regnum);
 	case EM_LOONGARCH:
 		return __get_perf_regnum_for_unw_regnum_loongarch(unw_regnum);
 	case EM_MIPS:
@@ -47,6 +49,9 @@ void libunwind_arch__flush_access(struct maps *maps)
 		break;
 	case EM_AARCH64:
 		__libunwind_arch__flush_access_arm64(maps);
+		break;
+	case EM_IA_64:
+		__libunwind_arch__flush_access_ia64(maps);
 		break;
 	case EM_LOONGARCH:
 		__libunwind_arch__flush_access_loongarch(maps);
@@ -91,6 +96,9 @@ void libunwind_arch__finish_access(struct maps *maps)
 	case EM_AARCH64:
 		__libunwind_arch__finish_access_arm64(maps);
 		break;
+	case EM_IA_64:
+		__libunwind_arch__finish_access_ia64(maps);
+		break;
 	case EM_LOONGARCH:
 		__libunwind_arch__finish_access_loongarch(maps);
 		break;
@@ -128,6 +136,8 @@ void *libunwind_arch__create_addr_space(unsigned int e_machine)
 		return __libunwind_arch__create_addr_space_arm();
 	case EM_AARCH64:
 		return __libunwind_arch__create_addr_space_arm64();
+	case EM_IA_64:
+		return __libunwind_arch__create_addr_space_ia64();
 	case EM_LOONGARCH:
 		return __libunwind_arch__create_addr_space_loongarch();
 	case EM_MIPS:
@@ -254,6 +264,9 @@ struct unwind_info *libunwind_arch_unwind_info__new(struct thread *thread,
 	case EM_AARCH64:
 		return __libunwind_arch_unwind_info__new_arm64(thread, sample, max_stack,
 							       best_effort, first_ip);
+	case EM_IA_64:
+		return __libunwind_arch_unwind_info__new_ia64(thread, sample, max_stack,
+									    best_effort, first_ip);
 	case EM_LOONGARCH:
 		return __libunwind_arch_unwind_info__new_loongarch(thread, sample, max_stack,
 								   best_effort, first_ip);
@@ -296,6 +309,8 @@ int libunwind_arch__unwind_step(struct unwind_info *ui)
 		return __libunwind_arch__unwind_step_arm(ui);
 	case EM_AARCH64:
 		return __libunwind_arch__unwind_step_arm64(ui);
+	case EM_IA_64:
+		return __libunwind_arch__unwind_step_ia64(ui);
 	case EM_LOONGARCH:
 		return __libunwind_arch__unwind_step_loongarch(ui);
 	case EM_MIPS:

@@ -293,4 +293,22 @@ int __libunwind_arch__unwind_step_i386(struct unwind_info *ui);
 int __libunwind_arch__unwind_step_x86_64(struct unwind_info *ui);
 int libunwind_arch__unwind_step(struct unwind_info *ui);
 
+/* ia64 backend (libunwind-ia64.c) */
+int __get_perf_regnum_for_unw_regnum_ia64(int unw_regnum);
+void __libunwind_arch__flush_access_ia64(struct maps *maps);
+void __libunwind_arch__finish_access_ia64(struct maps *maps);
+void *__libunwind_arch__create_addr_space_ia64(void);
+struct unwind_info *__libunwind_arch_unwind_info__new_ia64(struct thread *thread,
+							struct perf_sample *sample,
+							int max_stack,
+							bool best_effort,
+							uint64_t first_ip);
+int __libunwind_arch__unwind_step_ia64(struct unwind_info *ui);
+
+/* Generic helpers from unwind-libunwind.c, for the ia64 backend. */
+struct map;
+struct map *__libunwind__find_map(uint64_t ip, struct unwind_info *ui);
+int __libunwind__access_dso_mem(struct unwind_info *ui, uint64_t addr,
+				void *data_word);
+
 #endif /* __LIBUNWIND_ARCH_H */
