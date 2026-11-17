@@ -1889,6 +1889,13 @@ run_script (struct unw_script *script, struct unw_frame_info *state)
 	goto redo;
 }
 
+/*
+ * Set while this CPU holds unw.lock in find_save_locs().  Code that can run
+ * inside that section (kmalloc -> kmem tracepoints -> perf callchain) must not
+ * unwind again, or it spins on unw.lock on the same CPU.
+ */
+static DEFINE_PER_CPU(bool, unw_lock_owner);
+
 static int
 find_save_locs (struct unw_frame_info *info)
 {
@@ -1909,8 +1916,10 @@ find_save_locs (struct unw_frame_info *info)
 	scr = script_lookup(info);
 	if (!scr) {
 		spin_lock_irqsave(&unw.lock, flags);
+		this_cpu_write(unw_lock_owner, true);
 		scr = build_script(info);
 		if (!scr) {
+			this_cpu_write(unw_lock_owner, false);
 			spin_unlock_irqrestore(&unw.lock, flags);
 #ifdef UNW_DEBUG
 			UNW_DPRINT(0,
@@ -1928,10 +1937,16 @@ find_save_locs (struct unw_frame_info *info)
 
 	if (have_write_lock) {
 		write_unlock(&scr->lock);
+		this_cpu_write(unw_lock_owner, false);
 		spin_unlock_irqrestore(&unw.lock, flags);
 	} else
 		read_unlock(&scr->lock);
 	return 0;
+}
+
+bool unw_lock_held_this_cpu(void)
+{
+	return this_cpu_read(unw_lock_owner);
 }
 
 static int

@@ -136,6 +136,12 @@ extern int unw_unwind (struct unw_frame_info *info);
  */
 extern int unw_unwind_to_user (struct unw_frame_info *info);
 
+/*
+ * True if this CPU is inside the unw.lock section of the unwinder.  An
+ * unwind started from there would deadlock, so perf skips the walk then.
+ */
+extern bool unw_lock_held_this_cpu (void);
+
 #define unw_is_intr_frame(info)	(((info)->flags & UNW_FLAG_INTERRUPT_FRAME) != 0)
 
 static inline int
