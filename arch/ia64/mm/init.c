@@ -18,6 +18,7 @@
 #include <linux/sched/signal.h>
 #include <linux/mmzone.h>
 #include <linux/module.h>
+#include <linux/perf_event.h>
 #include <linux/personality.h>
 #include <linux/reboot.h>
 #include <linux/slab.h>
@@ -148,6 +149,13 @@ ia64_init_addr_space (void)
 			mmap_write_unlock(current->mm);
 		}
 	}
+
+	/*
+	 * The gate page is not a VMA in the mm, so the kernel does not report it
+	 * to perf on its own.  Report it here, as [vdso], so user samples and
+	 * unwinds in the gate (sigtramp, the break syscall stub) resolve.
+	 */
+	perf_event_mmap(get_gate_vma(current->mm));
 }
 
 void
@@ -297,6 +305,12 @@ __initcall(gate_vma_init);
 struct vm_area_struct *get_gate_vma(struct mm_struct *mm)
 {
 	return &gate_vma;
+}
+
+/* The gate page is reported to perf and /proc as the [vdso] mapping. */
+const char *arch_vma_name(struct vm_area_struct *vma)
+{
+	return vma == &gate_vma ? "[vdso]" : NULL;
 }
 
 int in_gate_area_no_mm(unsigned long addr)
