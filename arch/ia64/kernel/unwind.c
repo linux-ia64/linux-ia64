@@ -59,7 +59,7 @@
 static unsigned int unw_debug_level = UNW_DEBUG;
 #define UNW_DEBUG_ON(n)	unw_debug_level >= n
 #else
-#define UNW_DEBUG_ON(n)	1
+#define UNW_DEBUG_ON(n)	0
 #endif
 /* Do not code a printk level, not all debug lines end in newline */
 #define UNW_DPRINT(n, ...)  if (UNW_DEBUG_ON(n)) printk(__VA_ARGS__)
