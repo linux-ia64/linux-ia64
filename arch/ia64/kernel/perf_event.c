@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/percpu.h>
 #include <linux/perf_event.h>
+#include <linux/sched/clock.h>
 #include <linux/sched/task_stack.h>
 #include <linux/smp.h>
 #include <linux/sysfs.h>
@@ -746,7 +747,10 @@ static irqreturn_t ia64_pmu_interrupt(int irq, void *arg)
 	struct perf_sample_data data;
 	bool etb_read = false;
 	unsigned long ovfl;
+	u64 start_clock;
 	int idx;
+
+	start_clock = sched_clock();
 
 	/*
 	 * An overflowing monitor with pmc.oi set freezes the whole PMU and
@@ -789,6 +793,15 @@ static irqreturn_t ia64_pmu_interrupt(int irq, void *arg)
 		ia64_pmu_unfreeze();
 	else
 		ia64_pmu_freeze();
+
+	/*
+	 * Let the core lower perf_event_max_sample_rate when samples get
+	 * expensive (kernel callchains walk the unwinder here).  Without this,
+	 * only max_samples_per_tick bounds the handler, and 100 samples per
+	 * tick with callchains can fill every tick and livelock the CPU in
+	 * ia64_handle_irq().
+	 */
+	perf_sample_event_took(sched_clock() - start_clock);
 
 	return IRQ_HANDLED;
 }
